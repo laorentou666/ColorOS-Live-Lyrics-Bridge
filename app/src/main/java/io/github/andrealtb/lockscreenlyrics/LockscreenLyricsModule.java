@@ -2710,6 +2710,7 @@ public final class LockscreenLyricsModule extends XposedModule {
                     .setId(HOOK_ID_SYSTEMUI_LOAD_LYRIC)
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept(this::onSystemUiLoadLyricInBg);
+            installPlayerMediaLyricRepair(classLoader, loadLyricInBg);
             installKuWoArtworkSnapshotHook(loadLyricInBg.getDeclaringClass());
             installKuWoSeedlingArtworkHook(classLoader);
             installSystemUiArtworkDiagnosticsHook(classLoader);
@@ -4036,6 +4037,49 @@ public final class LockscreenLyricsModule extends XposedModule {
         mainHandler.post(this::clearSystemUiPlaybackControllerBinding);
         mainHandler.post(this::refreshTranslationActionViewVisibility);
         updateScreenTimeoutWakeLock(currentApplicationContext());
+    }
+
+    private void installPlayerMediaLyricRepair(ClassLoader classLoader, Method loader) {
+        try {
+            Class<?> manager = classLoader.loadClass(
+                    "com.android.systemui.media.controls.domain.pipeline.LegacyMediaDataManagerImpl");
+            Class<?> data = classLoader.loadClass(
+                    "com.android.systemui.media.controls.shared.model.MediaData");
+            Method entry = PlayerMediaLyricRepair.resolveEntry(manager, data);
+            if (entry == null) return;
+            hook(entry)
+                    .setId("oplus-player-media-lyric-repair")
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        try {
+                            boolean repaired = PlayerMediaLyricRepair.repair(
+                                    chain.getThisObject(), (String) chain.getArg(0), chain.getArg(2),
+                                    (String) chain.getArg(3), loader,
+                                    (packageName, title, artist, metadata) -> {
+                                        if (!isModuleManagedPlayerPackage(packageName)
+                                                || !(metadata instanceof MediaMetadata)) return false;
+                                        LyricInfoContract.NormalizedPayload payload =
+                                                LyricInfoContract.parseLyricInfo(((MediaMetadata) metadata)
+                                                        .getString(OPLUS_LYRIC_INFO_KEY));
+                                        return payload != null
+                                                && payloadMatchesTrack(payload.payload, title, artist);
+                                    });
+                            if (repaired) {
+                                info(BridgeDebugArea.MEDIA, BridgeEvents.LYRIC_MODEL_RETAINED,
+                                        "Reloaded native lyrics before player-state media publication");
+                            }
+                        } catch (Throwable failure) {
+                            error("Failed to complete player-state lyric load", failure);
+                        }
+                        return chain.proceed();
+                    });
+            infoAlways(BridgeDebugArea.BOOTSTRAP, BridgeEvents.HOOK_INSTALLED,
+                    "Hooked player-state native lyric repair");
+        } catch (ClassNotFoundException ignored) {
+            // Other SystemUI pipelines retain their own lyric publication path.
+        } catch (Throwable failure) {
+            error("Failed to hook player-state native lyric repair", failure);
+        }
     }
 
     private Object onSeedlingMediaBundle(XposedInterface.Chain chain) throws Throwable {
