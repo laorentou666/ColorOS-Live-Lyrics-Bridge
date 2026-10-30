@@ -34,8 +34,15 @@ lyric-mode preferences under host control.
 
 Regression tests exercise pause/buffering/resume rebuilds, populated native data,
 other publication reasons, missing identity, mismatched tracks/packages, session
-replacement and empty loader results. On-device validation of the patched APK is
-still required to establish that this path accounts for the observed reproduction.
+replacement and empty loader results.
 
 Local validation: 25 tests passed across PlayerMediaLyricRepairTest,
 LyricInfoTrackMatcherTest and SystemUiLoadLyricPolicyTest; `:app:assembleDebug` passed.
+
+On-device validation (2026-10-31): the user confirmed that the reported lockscreen
+lyric disappearance was fixed after installing the Debug APK containing commit
+`2e253f6` on the OnePlus 13T described above. The APK replaced the original Bridge
+installation, with its settings restored. This is user-reported confirmation for
+the original pause/resume and seek issue on this device/software combination.
+The pre-fix log capture and local test results remain the recorded diagnostic
+evidence; the post-fix outcome was confirmed by the user through manual testing.
