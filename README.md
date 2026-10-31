@@ -1,5 +1,11 @@
 # ColorOS Live Lyrics Bridge
 
+**Fork changes**
+
+- Fetch lyrics from NetEase Cloud Music, QQ Music, Kugou and AMLL TTML in parallel, with YRC/QRC/KRC/TTML/LRC and translation support.
+- Select by timing quality and track match, then the source order set in Bridge settings; ordering changes are saved and applied immediately.
+- Adapt TTML backing vocals, duets and translations to the lock-screen timeline. Keep the existing rendering and player-state fixes, with the original lyric pipeline as fallback.
+
 [![Build Debug APK](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml/badge.svg)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml)
 [![Latest release](https://img.shields.io/github/v/release/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/releases/latest)
 

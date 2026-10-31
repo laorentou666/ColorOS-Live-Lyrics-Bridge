@@ -840,6 +840,7 @@ public final class LockscreenLyricsModule extends XposedModule {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Object systemUiPlaybackControllerLock = new Object();
     private PlaybackControllerBinding systemUiPlaybackControllerBinding;
+    private final OnlineLyricRuntime onlineLyrics = new OnlineLyricRuntime();
     private long nextSystemUiPlaybackControllerEpoch;
     private volatile long lastPlaybackControllerDiscoveryElapsedMs = -1L;
     private volatile String lastPlaybackControllerDiscoveryPackage = "";
@@ -1999,6 +2000,7 @@ public final class LockscreenLyricsModule extends XposedModule {
         LyricUiConfig previousConfig = lyricUiConfig;
         LyricUiConfig config = LyricUiConfigRepository.load(preferences);
         lyricContentCleanupConfig = LyricContentCleanupRepository.load(preferences);
+        onlineLyrics.setOrder(OnlineLyricSettings.read(context));
         lyricUiConfig = config;
         runtimeLyricUiConfig = config;
         dynamicArtworkRuntime.setCoverColorEnabled(config.glowFollowsCover && C17GlowSupport.available(context));
@@ -3058,13 +3060,18 @@ public final class LockscreenLyricsModule extends XposedModule {
                 lastSystemUiArtistName,
                 incomingTitle,
                 incomingArtist)) {
-            return chain.proceed();
+            args[metadataIndex] = prepareOnlineLyrics(
+                    metadataChangedOwner(chain, args), args[metadataIndex - 1], metadata,
+                    findPlayerPackageInArgs(chain.getArgs()));
+            return chain.proceed(args);
         }
         MediaMetadata stable = buildMetadataWithStableSystemUiIdentity(
                 metadata,
                 lastSystemUiSongName,
                 lastSystemUiArtistName);
-        args[metadataIndex] = stable;
+        args[metadataIndex] = prepareOnlineLyrics(
+                metadataChangedOwner(chain, args), args[metadataIndex - 1], stable,
+                findPlayerPackageInArgs(chain.getArgs()));
         if (kuWoRuntime.takeCarLyricNormalizedLogOnce()) {
             info(BridgeDebugArea.MEDIA, BridgeEvents.DETAIL, "Normalized KuWo car-lyric identity before media data update");
         }
@@ -3081,6 +3088,28 @@ public final class LockscreenLyricsModule extends XposedModule {
             return args[0];
         }
         return null;
+    }
+
+    /** Online lyrics re-enter the existing metadata path; native lyrics remain the fallback. */
+    private MediaMetadata prepareOnlineLyrics(
+            Object owner, Object key, MediaMetadata metadata, String packageName) {
+        if (owner == null || !(key instanceof String)) return metadata;
+        try {
+            WeakReference<Object> ownerRef = new WeakReference<>(owner);
+            Method refresh = resolveSystemUiMetadataRefreshMethod(owner);
+            return onlineLyrics.observe(nullToEmpty(packageName), (String) key, metadata, updated -> {
+                Object currentOwner = ownerRef.get();
+                if (currentOwner == null || refresh == null) return;
+                try {
+                    refresh.invoke(currentOwner, key, updated);
+                } catch (Throwable error) {
+                    error("Failed to refresh online lyric metadata", error);
+                }
+            });
+        } catch (Throwable error) {
+            error("Failed to prepare online lyrics", error);
+            return metadata;
+        }
     }
 
     private static int metadataArgIndex(Object[] args) {
@@ -3528,6 +3557,13 @@ public final class LockscreenLyricsModule extends XposedModule {
                     normalizedArgs[1] = metadata;
                     info(BridgeDebugArea.MEDIA, BridgeEvents.SESSION_REDUCED,
                             "Normalized KuWo car-lyric metadata identity for SystemUI load");
+                }
+                MediaMetadata onlineMetadata = onlineLyrics.apply(
+                        String.valueOf(chain.getArg(0)), metadata);
+                if (onlineMetadata != metadata) {
+                    metadata = onlineMetadata;
+                    normalizedArgs = chain.getArgs().toArray(new Object[0]);
+                    normalizedArgs[1] = metadata;
                 }
                 String lyricInfo = metadata.getString(OPLUS_LYRIC_INFO_KEY);
                 LyricInfoContract.NormalizedPayload originalPayload =
@@ -4039,6 +4075,7 @@ public final class LockscreenLyricsModule extends XposedModule {
         updateScreenTimeoutWakeLock(currentApplicationContext());
     }
 
+    @SuppressLint("WrongConstant") // ColorOS extends MediaMetadata with the lyricInfo key.
     private void installPlayerMediaLyricRepair(ClassLoader classLoader, Method loader) {
         try {
             Class<?> manager = classLoader.loadClass(
@@ -11056,6 +11093,10 @@ public final class LockscreenLyricsModule extends XposedModule {
                         } else if (LyricUiSettings.ACTION_DEBUG_SETTINGS_CHANGED.equals(
                                 intent.getAction())) {
                             handleBridgeDebugSettingsChanged(receiverContext, intent);
+                        } else if (OnlineLyricSettings.ACTION.equals(intent.getAction())) {
+                            OnlineLyricSettings.save(receiverContext,
+                                    nullToEmpty(intent.getStringExtra(OnlineLyricSettings.KEY)));
+                            onlineLyrics.setOrder(OnlineLyricSettings.read(receiverContext));
                         } else if (LyricUiSettings.ACTION_RESTART_SYSTEM_UI.equals(
                                 intent.getAction())) {
                             handleSystemUiRestartRequest(intent);
@@ -11078,6 +11119,7 @@ public final class LockscreenLyricsModule extends XposedModule {
                 filter.addAction(LyricUiSettings.ACTION_REQUEST_MODULE_STATUS);
                 filter.addAction(LyricUiSettings.ACTION_CONTENT_CLEANUP_CHANGED);
                 filter.addAction(LyricUiSettings.ACTION_DEBUG_SETTINGS_CHANGED);
+                filter.addAction(OnlineLyricSettings.ACTION);
                 filter.addAction(LyricUiSettings.ACTION_RESTART_SYSTEM_UI);
                 if (Build.VERSION.SDK_INT >= 33) {
                     appContext.registerReceiver(

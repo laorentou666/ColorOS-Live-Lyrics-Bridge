@@ -1,5 +1,10 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+kotlin {
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
 }
 
 val releaseStoreFilePath = providers.environmentVariable("SIGNING_STORE_FILE").orNull

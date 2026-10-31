@@ -5,6 +5,7 @@
 
     <uses-permission android:name="io.github.andrealtb.lockscreenlyrics.permission.CHANGE_LYRIC_UI_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <package android:name="com.android.systemui" />
@@ -58,6 +59,13 @@
             android:exported="false"
             android:importantForAutofill="no"
             android:label="@string/player_translation_settings_title"
+            android:theme="@style/Theme.LockscreenLyrics"
+            android:parentActivityName=".LyricUiSettingsActivity" />
+        <activity
+            android:name=".OnlineLyricSettingsActivity"
+            android:exported="false"
+            android:importantForAutofill="no"
+            android:label="@string/online_lyric_order_title"
             android:theme="@style/Theme.LockscreenLyrics"
             android:parentActivityName=".LyricUiSettingsActivity" />
         <activity

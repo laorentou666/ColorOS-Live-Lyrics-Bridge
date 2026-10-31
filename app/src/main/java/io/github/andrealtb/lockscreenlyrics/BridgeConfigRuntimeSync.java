@@ -27,6 +27,7 @@ final class BridgeConfigRuntimeSync {
         sendCleanup(context, main);
         sendDebug(context, revision);
         sendArtwork(context, revision);
+        OnlineLyricSettings.publish(context);
     }
 
     private static void sendArtwork(Context context, long revision) {

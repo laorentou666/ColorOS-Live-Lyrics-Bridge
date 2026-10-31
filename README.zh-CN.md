@@ -1,5 +1,11 @@
 # ColorOS Live Lyrics Bridge
 
+**本 fork 的修改**
+
+- 并行获取网易云、QQ 音乐、酷狗和 AMLL TTML 歌词，支持 YRC/QRC/KRC/TTML/LRC 及翻译。
+- 按歌词质量、曲目匹配度和用户设置的来源顺序选优；设置页支持上移、下移，调整后持久化并即时生效。
+- 适配 TTML 背景和声、对唱及翻译时间轴，沿用现有锁屏岛渲染和播放器状态修复，在线获取失败时回退原歌词管线。
+
 [![构建 Debug APK](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml/badge.svg)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml)
 [![最新版本](https://img.shields.io/github/v/release/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/releases/latest)
 

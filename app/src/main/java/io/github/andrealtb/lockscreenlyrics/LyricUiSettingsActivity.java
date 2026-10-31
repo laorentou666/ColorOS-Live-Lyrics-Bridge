@@ -240,6 +240,7 @@ public final class LyricUiSettingsActivity extends SettingsBaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        OnlineLyricSettings.publish(this);
         updateArtworkSummary();
         if (!resumedOnce) {
             resumedOnce = true;
@@ -578,6 +579,12 @@ public final class LyricUiSettingsActivity extends SettingsBaseActivity {
                 getString(R.string.link_player_translation),
                 getString(R.string.link_player_translation_sub),
                 () -> startActivity(new Intent(this, PlayerTranslationSettingsActivity.class))));
+        addCardDivider(compatibility);
+        compatibility.addView(linkRow(
+                R.drawable.ic_translation,
+                getString(R.string.online_lyric_order_title),
+                getString(R.string.online_lyric_order_summary),
+                () -> startActivity(new Intent(this, OnlineLyricSettingsActivity.class))));
         addCardDivider(compatibility);
         compatibility.addView(linkRow(
                 R.drawable.ic_cleanup,
