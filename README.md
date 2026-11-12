@@ -2,6 +2,7 @@
 
 **Fork changes**
 
+- Fix failed lyric retrieval: ColorOS 16 player-state rebuilds republish media data with an empty lyric model, so Bridge reloads native lyrics through `loadLyricInBg` before publication; when MediaSession omits lyrics, Bridge fetches NetEase, QQ Music, Kugou and AMLL TTML in parallel and injects the verified track timeline into the lock-screen pipeline.
 - Fetch lyrics from NetEase Cloud Music, QQ Music, Kugou and AMLL TTML in parallel, with YRC/QRC/KRC/TTML/LRC and translation support.
 - Select by timing quality and track match, then the source order set in Bridge settings; ordering changes are saved and applied immediately.
 - Adapt TTML backing vocals, duets and translations to the lock-screen timeline. Keep the existing rendering and player-state fixes, with the original lyric pipeline as fallback.
