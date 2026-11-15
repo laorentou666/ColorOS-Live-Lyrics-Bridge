@@ -49,6 +49,16 @@ class OnlineLyricRuntime @JvmOverloads constructor(fetcher: LyricFetcher? = null
     @Synchronized fun apply(mediaKey: String, incoming: MediaMetadata): MediaMetadata =
         session.current(identity(mediaKey, incoming))?.let { inject(incoming, it) } ?: incoming
 
+    @SuppressLint("WrongConstant") // ColorOS extends MediaMetadata with the lyricInfo key.
+    @Synchronized fun resolveForPlayerRebuild(mediaKey: String, incoming: MediaMetadata,
+        title: String, artist: String): MediaMetadata? {
+        // Player-state rebuilds read the player's original MediaSession metadata. Reapply
+        // the current online result using the same media key and complete track identity.
+        val effective = apply(mediaKey, incoming)
+        val payload = LyricInfoContract.parse(effective.getString(LyricInfoContract.METADATA_KEY))
+        return effective.takeIf { LyricInfoTrackMatcher.payloadMatchesTrack(payload, title, artist) }
+    }
+
     fun setOrder(value: String?) = session.setOrder(value)
 
     @SuppressLint("WrongConstant") // ColorOS extends MediaMetadata with the lyricInfo key.
@@ -76,7 +86,7 @@ class OnlineLyricRuntime @JvmOverloads constructor(fetcher: LyricFetcher? = null
             .put("songId", base.getString(MediaMetadata.METADATA_KEY_MEDIA_ID).orEmpty())
             .put("lyric", lyric.lineLyric()).put("rawLyric", lyric.rawLyric()).put("translationLyric", lyric.translationLyric())
             .put("provider", player).put("source", "bridge-online:${lyric.source}")
-            .put("trackKey", native?.trackKey?.takeIf { it.isNotBlank() } ?: "$mediaKey:${track.title}:${track.artist}")
+            .put("trackKey", native?.trackKey?.takeIf { it.isNotBlank() } ?: TrackIdentity.buildKey(track.title, track.artist))
             .put("sessionGeneration", native?.sessionGeneration ?: 0)
         return MediaMetadata.Builder(base).putString(LyricInfoContract.METADATA_KEY, payload.toString()).build()
     }

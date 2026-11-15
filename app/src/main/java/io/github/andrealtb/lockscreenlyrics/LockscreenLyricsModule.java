@@ -4092,14 +4092,11 @@ public final class LockscreenLyricsModule extends XposedModule {
                             boolean repaired = PlayerMediaLyricRepair.repair(
                                     chain.getThisObject(), (String) chain.getArg(0), chain.getArg(2),
                                     (String) chain.getArg(3), loader,
-                                    (packageName, title, artist, metadata) -> {
+                                    (key, packageName, title, artist, metadata) -> {
                                         if (!isModuleManagedPlayerPackage(packageName)
-                                                || !(metadata instanceof MediaMetadata)) return false;
-                                        LyricInfoContract.NormalizedPayload payload =
-                                                LyricInfoContract.parseLyricInfo(((MediaMetadata) metadata)
-                                                        .getString(OPLUS_LYRIC_INFO_KEY));
-                                        return payload != null
-                                                && payloadMatchesTrack(payload.payload, title, artist);
+                                                || !(metadata instanceof MediaMetadata)) return null;
+                                        return onlineLyrics.resolveForPlayerRebuild(
+                                                key, (MediaMetadata) metadata, title, artist);
                                     });
                             if (repaired) {
                                 info(BridgeDebugArea.MEDIA, BridgeEvents.LYRIC_MODEL_RETAINED,

@@ -8,8 +8,9 @@ import java.util.List;
 final class PlayerMediaLyricRepair {
     static final String REBUILD_REASON = "loadPlayerMediaDataInBg";
 
-    interface MetadataGate {
-        boolean accepts(String packageName, String title, String artist, Object metadata);
+    interface MetadataResolver {
+        /** Returns the validated metadata to load, or null to keep the host publication. */
+        Object resolve(String key, String packageName, String title, String artist, Object metadata);
     }
 
     private PlayerMediaLyricRepair() {
@@ -30,7 +31,7 @@ final class PlayerMediaLyricRepair {
     }
 
     static boolean repair(Object manager, String key, Object data, String reason,
-            Method loader, MetadataGate gate) throws ReflectiveOperationException {
+            Method loader, MetadataResolver resolver) throws ReflectiveOperationException {
         if (!REBUILD_REASON.equals(reason) || data == null || key == null || key.isEmpty()) {
             return false;
         }
@@ -40,7 +41,6 @@ final class PlayerMediaLyricRepair {
         String packageName = text(get(data, "getPackageName"));
         String title = text(get(data, "getSong"));
         String artist = text(get(data, "getArtist"));
-        if (!gate.accepts(packageName, title, artist, metadata)) return false;
 
         Object extension = get(data, "getMediaDataEx");
         if (extension == null) return false;
@@ -48,10 +48,12 @@ final class PlayerMediaLyricRepair {
         if (hasLines(previous)) return false;
         Object owner = get(manager, "getMediaDataManagerEx");
         if (!loader.getDeclaringClass().isInstance(owner)) return false;
+        Object effectiveMetadata = resolver.resolve(key, packageName, title, artist, metadata);
+        if (effectiveMetadata == null) return false;
 
-        // Reload this entry's validated metadata. A null previous lyric prevents borrowing
-        // state from another song or MediaSession, including a session that reused the key.
-        Object loaded = loader.invoke(owner, key, metadata, packageName, title, artist, null);
+        // Load the exact metadata accepted by the resolver, including any online enrichment.
+        // A null previous lyric keeps the native loader bound to this validated entry.
+        Object loaded = loader.invoke(owner, key, effectiveMetadata, packageName, title, artist, null);
         if (!hasLines(loaded)) return false;
         Method setter = extension.getClass().getMethod("setLyricData", loader.getReturnType());
         setter.invoke(extension, loaded);

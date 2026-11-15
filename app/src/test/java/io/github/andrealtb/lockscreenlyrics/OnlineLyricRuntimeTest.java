@@ -70,4 +70,102 @@ public class OnlineLyricRuntimeTest {
         runtime.observe("player", "key", new MediaMetadata.Builder(first).putLong(MediaMetadata.METADATA_KEY_DURATION, 183000).build(), value -> {});
         assertEquals(2, pending.size());
     }
+
+    @Test public void legacyMetadataGetsAnOnlineIdentityAcceptedByPlayerStateRepair() {
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) ->
+                CompletableFuture.completedFuture(Collections.singletonList(lyric())));
+        // NetEase 7.2.22 publishes the standard track fields without a Provider track key.
+        MediaMetadata original = legacyMetadata("A");
+        MediaMetadata enriched = runtime.observe("com.netease.cloudmusic", "media-key",
+                original, value -> {});
+        LyricInfoContract.Payload payload = LyricInfoContract.parse(enriched.getString("lyricInfo"));
+        assertNotNull(payload);
+        assertTrue(LyricInfoTrackMatcher.payloadMatchesTrack(payload, "A", "Artist"));
+        assertFalse(LyricInfoTrackMatcher.payloadMatchesTrack(payload, "B", "Artist"));
+    }
+
+    @Test public void playerRebuildUsesCompletedOnlineLyricsWithOriginalSessionMetadata() {
+        CompletableFuture<List<OnlineLyric>> pending = new CompletableFuture<>();
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) -> pending);
+        MediaMetadata original = legacyMetadata("A");
+        List<MediaMetadata> updates = new ArrayList<>();
+        runtime.observe("com.netease.cloudmusic", "media-key", original, updates::add);
+        assertNull(runtime.resolveForPlayerRebuild("media-key", original, "A", "Artist"));
+        pending.complete(Collections.singletonList(lyric()));
+        shadowOf(Looper.getMainLooper()).idle();
+        runtime.observe("com.netease.cloudmusic", "media-key", updates.get(0), updates::add);
+
+        // Pause, buffering and resume each rebuild from the unchanged player metadata.
+        for (int state : new int[]{2, 6, 3}) {
+            MediaMetadata resolved = runtime.resolveForPlayerRebuild(
+                    "media-key", original, "A", "Artist");
+            assertNotNull("Playback state " + state, resolved);
+            assertEquals("bridge-online:netease",
+                    LyricInfoContract.parse(resolved.getString("lyricInfo")).source);
+            assertEquals("content://player/cover",
+                    resolved.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI));
+        }
+        assertNull(original.getString("lyricInfo"));
+        assertEquals("Current line", original.getString("android.media.metadata.LYRIC"));
+    }
+
+    @Test public void onlineRepairRequiresTheCurrentMediaKeyAndCompleteTrackIdentity() {
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) ->
+                CompletableFuture.completedFuture(Collections.singletonList(lyric())));
+        MediaMetadata original = legacyMetadata("A");
+        runtime.observe("com.netease.cloudmusic", "media-key", original, value -> {});
+        assertNull(runtime.resolveForPlayerRebuild("other-key", original, "A", "Artist"));
+        assertNull(runtime.resolveForPlayerRebuild("media-key", original, "B", "Artist"));
+        assertNull(runtime.resolveForPlayerRebuild("media-key", original, "A", "Other artist"));
+        assertNull(runtime.resolveForPlayerRebuild("media-key", original, "", "Artist"));
+        for (MediaMetadata changed : new MediaMetadata[]{legacyMetadata("B"),
+                new MediaMetadata.Builder(original).putString(MediaMetadata.METADATA_KEY_ARTIST, "Other artist").build(),
+                new MediaMetadata.Builder(original).putString(MediaMetadata.METADATA_KEY_ALBUM, "Other album").build(),
+                new MediaMetadata.Builder(original).putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "new-id").build(),
+                new MediaMetadata.Builder(original).putLong(MediaMetadata.METADATA_KEY_DURATION, 183000).build()}) {
+            assertNull(runtime.resolveForPlayerRebuild("media-key", changed, "A", "Artist"));
+        }
+    }
+
+    @Test public void trackSwitchAndFailedLookupLeaveLegacyRepairWithoutAResult() {
+        List<CompletableFuture<List<OnlineLyric>>> pending = new ArrayList<>();
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) -> {
+            CompletableFuture<List<OnlineLyric>> result = new CompletableFuture<>();
+            pending.add(result);
+            return result;
+        });
+        MediaMetadata first = legacyMetadata("A");
+        MediaMetadata second = legacyMetadata("B");
+        runtime.observe("com.netease.cloudmusic", "media-key", first, value -> {});
+        pending.get(0).complete(Collections.singletonList(lyric()));
+        assertNotNull(runtime.resolveForPlayerRebuild("media-key", first, "A", "Artist"));
+        runtime.observe("com.netease.cloudmusic", "media-key", second, value -> {});
+        assertNull(runtime.resolveForPlayerRebuild("media-key", first, "A", "Artist"));
+        pending.get(1).complete(Collections.emptyList());
+        assertNull(runtime.resolveForPlayerRebuild("media-key", second, "B", "Artist"));
+    }
+
+    @Test public void nativeProviderMetadataKeepsItsExistingRepairPath() {
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) ->
+                CompletableFuture.completedFuture(Collections.emptyList()));
+        MediaMetadata nativeMetadata = new MediaMetadata.Builder(metadata("A"))
+                .putString("lyricInfo", "{\"lyric\":\"[00:01]Native\","
+                        + "\"trackKey\":\"123|A|Artist|180\",\"sessionGeneration\":7}").build();
+        assertSame(nativeMetadata, runtime.resolveForPlayerRebuild(
+                "media-key", nativeMetadata, "A", "Artist"));
+        assertNull(runtime.resolveForPlayerRebuild("media-key", nativeMetadata, "B", "Artist"));
+        runtime.observe("com.netease.cloudmusic", "media-key", nativeMetadata, value -> {});
+        assertSame(nativeMetadata, runtime.resolveForPlayerRebuild(
+                "media-key", nativeMetadata, "A", "Artist"));
+    }
+
+    private MediaMetadata legacyMetadata(String title) {
+        return new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, "Artist")
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, "Album")
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, 180000)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "content://player/cover")
+                .putString("android.media.metadata.LYRIC", "Current line")
+                .build();
+    }
 }

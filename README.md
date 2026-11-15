@@ -2,6 +2,7 @@
 
 **Fork changes**
 
+- Support NetEase 7.2.22 through online lyrics during pause, resume and seek rebuilds, with user-confirmed device testing. Preserve the native lyric repair used by 9.0.40. See the [repair record](docs/PLAYER_STATE_LYRIC_REPAIR.md).
 - Fix failed lyric retrieval: ColorOS 16 player-state rebuilds republish media data with an empty lyric model, so Bridge reloads native lyrics through `loadLyricInBg` before publication; when MediaSession omits lyrics, Bridge fetches NetEase, QQ Music, Kugou and AMLL TTML in parallel and injects the verified track timeline into the lock-screen pipeline.
 - Fetch lyrics from NetEase Cloud Music, QQ Music, Kugou and AMLL TTML in parallel, with YRC/QRC/KRC/TTML/LRC and translation support.
 - Select by timing quality and track match, then the source order set in Bridge settings; ordering changes are saved and applied immediately.

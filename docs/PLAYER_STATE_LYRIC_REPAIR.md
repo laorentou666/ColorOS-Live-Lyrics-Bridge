@@ -46,3 +46,62 @@ installation, with its settings restored. This is user-reported confirmation for
 the original pause/resume and seek issue on this device/software combination.
 The pre-fix log capture and local test results remain the recorded diagnostic
 evidence; the post-fix outcome was confirmed by the user through manual testing.
+
+## NetEase 7.2.22 and online lyrics (2026-11-15)
+
+The supplied APK identifies itself as `com.netease.cloudmusic`, version `7.2.22`
+(7002022), SHA-256
+`a2adc3c50a83f706daa0512735b88235e35be54c74b2b7574649faacf9c49a38`.
+Static inspection of `com.netease.cloudmusic.module.player.playerutilmanager.e`
+shows a `MediaMetadataCompat.Builder` publishing title, artist, album, duration
+and artwork. Its optional media-session lyric setting supplies current-line text
+through `android.media.metadata.LYRIC`; the key is defined in
+`com.netease.cloudmusic.module.lyric.a`. Bridge's existing online lookup can use
+these standard track fields to produce a complete `lyricInfo` timeline.
+The README's 9.0.40 Provider profile remains the documented Provider baseline;
+this change adapts the fork's Bridge online-lyrics path for the supplied 7.2.22 APK.
+
+Two gaps prevented that online timeline from completing a player-state rebuild:
+
+- With no Provider track key, the online runtime produced `mediaKey:title:artist`.
+  `LyricInfoTrackMatcher` expects `title|artist` or a Provider stable key, so it
+  rejected the generated identity. The fallback now uses `TrackIdentity.buildKey`;
+  supplied Provider keys retain their existing value.
+- `loadPlayerMediaDataInBgInner` reads the original player `MediaSession` metadata.
+  The old repair gate required that metadata to already contain `lyricInfo`, while
+  online enrichment lives in SystemUI. The resolver now reapplies the completed
+  online result for the exact media key, media ID, title, artist, album and duration,
+  validates it against the incoming media entry, and returns the same metadata to
+  the native lyric loader.
+
+The existing rebuild-reason, managed-package, session-token, empty-native-list
+and populated-loader-result checks still apply. Each native load uses a null
+previous lyric. Valid incoming Provider lyrics remain available independently of
+online lookup success. Pending or failed online lookup leaves the host path in
+control; this adaptation depends on a successful online result for legacy metadata.
+Playback controls, lyric layout and AOD continue through their existing paths.
+
+The new legacy-identity regression failed on the original implementation before
+the fix. Added regressions cover original metadata after online refresh, media-key
+and track changes, lookup failure, Provider fallback, artwork preservation, and
+passing the resolved metadata to the native loader.
+
+Local build intermediates, reports and APKs are under `android_tools/bridge-build`
+using `android_tools/bridge-build.init.gradle` and the existing `build-bridge.ps1`.
+Local validation passed: 79 tests across the online-lyrics, player-state repair,
+track-matching, native-model, load-policy and publication-gate suites;
+`:app:lintDebug`, `:app:assembleDebug` and `git diff --check` also passed.
+The APK certificate matches the previous `v4.5.3-online-lyrics.20261031` Debug APK
+(certificate SHA-256
+`54c21ffb42e81ad580e489cbd0c2f3248b22d332e121a7a6d9e96bb6baeb854b`).
+On-device acceptance (2026-11-15): the user confirmed that the supplied Debug APK
+worked correctly in manual testing with NetEase 7.2.22. Its SHA-256 is
+`67e642b0c730391bdd01f28e957a3bb40403bf97345f1ac8b00ef647ca9ad5e7`.
+This is user-reported acceptance of the 7.2.22 fix. The 9.0.40 device evidence
+remains the earlier 2026-10-31 confirmation; its native repair path is covered
+by the current regression tests.
+
+Publication validation for `v4.5.3-netease-7.2.22.20261115`: all 910 unit tests
+completed, with 904 passing and 6 existing external-fixture cases skipped.
+Debug and Release Lint, Debug assembly, package/version/scope, certificate and
+alignment checks passed. The assembled APK hash matches the accepted artifact.

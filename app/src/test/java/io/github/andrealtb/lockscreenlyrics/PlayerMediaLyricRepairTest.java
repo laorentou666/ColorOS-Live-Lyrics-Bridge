@@ -89,6 +89,29 @@ public final class PlayerMediaLyricRepairTest {
     }
 
     @Test
+    public void loadsResolvedMetadataAndPreservesThePlayerOriginal() throws Exception {
+        Manager manager = new Manager();
+        Data data = new Data();
+        Metadata original = data.metadata;
+        original.lyrics = null;
+        Metadata enriched = new Metadata();
+        enriched.lyrics = "online lyrics";
+        Method loader = Loader.class.getMethod("load", String.class, Metadata.class,
+                String.class, String.class, String.class, Lyric.class);
+        assertTrue(PlayerMediaLyricRepair.repair(manager, "same-key", data, REASON, loader,
+                (key, pkg, title, artist, metadata) -> {
+                    assertEquals("same-key", key);
+                    assertSame(original, metadata);
+                    return enriched;
+                }));
+        assertSame(enriched, manager.loader.metadata);
+        assertSame(original, data.metadata);
+        assertNull(original.lyrics);
+        assertNull(manager.loader.previous);
+        assertEquals(Collections.singletonList("online lyrics"), data.extension.lyric.lines);
+    }
+
+    @Test
     public void resolverRequiresExactPublicationSignature() {
         assertNotNull(PlayerMediaLyricRepair.resolveEntry(Manager.class, Data.class));
         assertNull(PlayerMediaLyricRepair.resolveEntry(Object.class, Data.class));
@@ -99,8 +122,8 @@ public final class PlayerMediaLyricRepairTest {
         Method loader = Loader.class.getMethod("load", String.class, Metadata.class,
                 String.class, String.class, String.class, Lyric.class);
         return PlayerMediaLyricRepair.repair(manager, "same-key", data, reason, loader,
-                (pkg, title, artist, metadata) -> "player".equals(pkg)
-                        && "song".equals(title) && "artist".equals(artist));
+                (key, pkg, title, artist, metadata) -> "player".equals(pkg)
+                        && "song".equals(title) && "artist".equals(artist) ? metadata : null);
     }
 
     public static final class Metadata {
