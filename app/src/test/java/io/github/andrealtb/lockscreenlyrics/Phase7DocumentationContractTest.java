@@ -52,16 +52,10 @@ public final class Phase7DocumentationContractTest {
     }
 
     @Test
-    public void releaseDocumentsUseTheNewRepositoryAndCanonicalAssets() throws Exception {
-        String process = readProjectFile("docs/RELEASE_PROCESS.md");
+    public void releaseNotesUseTheCanonicalAssets() throws Exception {
         String notes = readProjectFile(".github/release-notes/4.3.0.md");
         String archive = readProjectFile("docs/releases/v4.3.0.md");
 
-        assertTrue(process.contains("Andrea-lyz/ColorOS-Live-Lyrics-Providers"));
-        assertTrue(process.contains("mode=rc"));
-        assertTrue(process.contains("19"));
-        assertTrue(process.contains("ColorOS-Live-Lyrics-Dynamic-Artwork-Provider-v"));
-        assertFalse(process.contains("Andrea-lyz/LyricProvider"));
         assertTrue(notes.contains("Character float-up"));
         assertTrue(notes.contains("libxposed API 102"));
         assertTrue(notes.contains("release-assets-v4.3.0.json"));

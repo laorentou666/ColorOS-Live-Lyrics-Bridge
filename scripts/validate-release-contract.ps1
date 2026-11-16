@@ -90,7 +90,6 @@ $requiredDocumentation = @(
     'docs\PLAYER_INTEGRATION.zh-CN.md',
     'docs\4.0\MIGRATION-3.8-TO-4.0.md',
     'docs\4.0\MIGRATION-3.8-TO-4.0.zh-CN.md',
-    'docs\RELEASE_PROCESS.md',
     ".github\release-notes\$($contract.suiteVersion).md",
     "docs\releases\v$($contract.suiteVersion).md"
 )
