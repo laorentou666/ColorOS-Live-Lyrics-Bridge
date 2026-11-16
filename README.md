@@ -1,222 +1,213 @@
 # ColorOS Live Lyrics Bridge
 
-**Fork changes**
+**本 fork 的修改**
 
-- Use a valid NetEase MediaSession song ID to fetch AMLL TTML first, then fall back to the existing search pipeline. NetEase search also matches aliases published in display titles.
-- Support NetEase 7.2.22 through online lyrics during pause, resume and seek rebuilds, with user-confirmed device testing. Preserve the native lyric repair used by 9.0.40. See the [repair record](docs/PLAYER_STATE_LYRIC_REPAIR.md).
-- Fix failed lyric retrieval: ColorOS 16 player-state rebuilds republish media data with an empty lyric model, so Bridge reloads native lyrics through `loadLyricInBg` before publication; when MediaSession omits lyrics, Bridge fetches NetEase, QQ Music, Kugou and AMLL TTML in parallel and injects the verified track timeline into the lock-screen pipeline.
-- Fetch lyrics from NetEase Cloud Music, QQ Music, Kugou and AMLL TTML in parallel, with YRC/QRC/KRC/TTML/LRC and translation support.
-- Select by timing quality and track match, then the source order set in Bridge settings; ordering changes are saved and applied immediately.
-- Adapt TTML backing vocals, duets and translations to the lock-screen timeline. Keep the existing rendering and player-state fixes, with the original lyric pipeline as fallback.
+- 网易云 MediaSession 提供有效歌曲 ID 时优先获取 AMLL TTML，失败后回到原有搜索流程；网易云搜索同时匹配显示歌名中附带的别名。
+- 适配网易云 7.2.22：通过在线歌词补全暂停、恢复和拖动进度时的歌词数据，用户已确认真机测试正常；保留 9.0.40 的原生歌词修复。详见[修复记录](docs/PLAYER_STATE_LYRIC_REPAIR.md)。
+- 修复歌词获取失败：ColorOS 16 播放器状态重建会重新发布空歌词媒体数据，现于发布前补调原生 `loadLyricInBg`；MediaSession 缺少歌词时并行检索网易云、QQ 音乐、酷狗和 AMLL TTML，校验曲目后注入锁屏歌词管线。
+- 并行获取网易云、QQ 音乐、酷狗和 AMLL TTML 歌词，支持 YRC/QRC/KRC/TTML/LRC 及翻译。
+- 按歌词质量、曲目匹配度和用户设置的来源顺序选优；设置页支持上移、下移，调整后持久化并即时生效。
+- 适配 TTML 背景和声、对唱及翻译时间轴，沿用现有锁屏岛渲染和播放器状态修复，在线获取失败时回退原歌词管线。
 
-This fork maintains NetEase Cloud Music compatibility (7.2.22 and 9.0.40). Other players retain the upstream Provider and display features; online matching uses the existing metadata search on a best-effort basis, with the original lyric pipeline as fallback. Player-specific fixes for other platforms are outside this fork's maintenance scope.
+[![构建 Debug APK](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml/badge.svg)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml)
+[![最新版本](https://img.shields.io/github/v/release/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/releases/latest)
 
-[![Build Debug APK](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml/badge.svg)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml)
-[![Latest release](https://img.shields.io/github/v/release/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/releases/latest)
-
-Language: English | [简体中文](README.zh-CN.md)
+语言：[English](README-en.md) | 简体中文
 
 <p align="center">
-  <img src="GIF.gif" alt="ColorOS lock-screen lyrics demo" width="360">
+  <img src="GIF.gif" alt="ColorOS 锁屏歌词演示" width="360">
 </p>
 
-Bring lyrics from more music apps to the native ColorOS / OPlus lock-screen lyric page.
+让更多音乐 App 的歌词，出现在 ColorOS / OPlus 自带的锁屏歌词页面里。
 
-This is not a floating overlay. It passes a player's full lyric timeline to the system UI, keeping the ColorOS look, transitions, and always-on display while adding word-by-word highlighting, translations, and appearance controls.
+它不是一套盖在锁屏上的悬浮窗，而是把播放器的完整歌词交给系统原生界面显示。这样既能保留 ColorOS 的锁屏风格、切歌动画和息屏显示，也能补上逐字高亮、翻译和外观设置。
 
-> Current release: **v4.5.3**.
+> 当前正式版本：**v4.5.3**。
 
-## What it does
+## 主要功能
 
-- Shows full lyrics on the native ColorOS lock screen and AOD lyric page.
-- Supports line-timed lyrics, word-by-word highlighting, and translations when the player provides the required data.
-- Offers an optional Salt Player-style character float-up animation that follows the reveal front; ordinary line-timed lyrics use it when Line-timed lyric progress is enabled.
-- Wraps or smoothly browses long lines instead of shrinking them into tiny text.
-- Lets you adjust active, unrevealed, translation, and inactive lyric brightness independently, including top/bottom edge fading and an optional extra inactive-row fade.
-- Also controls color, glow, blur, text size, weight, alignment, scaling, motion, lyric-row spacing, and wrapped-line spacing.
-- Includes Default, Soft, Vivid, and Minimal presets with a live preview.
-- Remembers translation choices per player and can hide leading title, credit, and copyright lines.
-- Can keep the screen awake while lyrics are visible, either indefinitely or for a chosen duration.
-- Preserves the media card's original previous, play/pause, next, and other controls.
-- Handles rapid track changes, pause/resume, AOD transitions, repeated lines, and long CJK text more reliably.
+- 在 ColorOS 原生锁屏和 AOD 页面显示完整歌词。
+- 支持普通逐行歌词、逐字高亮和双语翻译；具体效果取决于播放器能提供什么数据。
+- 可选 Salt Player 式字符上浮动画会跟随揭示前沿；开启“普通逐行歌词进度”后，普通逐行歌词也可使用该效果。
+- 长歌词会自动换行或平滑浏览，不会为了塞进一行而缩成很小的字。
+- 可分别调整实时高亮、当前行未高亮、实时翻译/进度、非实时正文/翻译亮度，以及上下边缘渐隐和非活动行额外淡化。
+- 还可调整颜色、光晕、模糊、字号、字重、对齐、缩放和动效；歌词之间与同一句内部换行的间距可以分开设置。
+- 内置“默认、柔和、醒目、极简”四种风格，设置时可以直接预览。
+- 可按播放器记住翻译开关，也可以清理歌词开头的歌名、制作人员和版权信息。
+- 歌词显示时可以保持屏幕常亮，也可以设置一个自定义的亮屏时长。
+- 保留系统媒体卡片的上一首、播放/暂停、下一首等原有操作。
+- 针对切歌、暂停恢复、AOD 切换、重复歌词和中日文长句做了专门处理。
 
-From v4.5.0, optional dynamic artwork is part of the stable release. Install the
-[Dynamic Artwork Provider](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Providers/blob/main/artwork-provider-am/README.md)
-from the same Release, then pick and authorize it in Bridge under Settings → Dynamic artwork; the small
-lyric cover and the large cover then play the current song's square motion artwork. On C17 it also
-drives a synchronized mirrored background and artwork-based glow colors. The motion cover frame rate is
-adjustable from 10 to 30 fps: lower saves battery, higher is smoother (default 30 fps, the video's
-original rate). Without the Provider the lock screen keeps the official static cover; AOD always uses
-the static cover.
+自 v4.5.0 起，可选的动态封面进入正式版：安装同一 Release 中的
+[动态封面 Provider](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Providers/blob/main/artwork-provider-am/README.md)
+并在 Bridge「设置 → 动态封面」中选择、授权后，锁屏歌词小封面与大封面会播放当前歌曲的方形动态封面；
+C17 还支持同步镜像动态背景与封面取色光晕。动态封面的帧率可在 10–30 fps 之间调节：调低更省电，
+调高更流畅（默认 30 fps，即视频原帧率）。不安装 Provider 时锁屏保持官方静态封面，AOD 始终使用静态封面。
 
-## Before you install
+## 使用前先确认
 
-This module is intended for devices that meet all of these requirements:
+这个模块适合满足以下条件的设备：
 
-- Root access and an LSPosed / LSP manager with **libxposed API 102** support.
-- A ColorOS / OPlus system image that already includes the native lock-screen lyric page.
-- An understanding that a major system or player update may require a compatibility update.
+- 已 Root，并安装支持 **libxposed API 102** 的 LSPosed / LSP 管理器。
+- 系统本身带有 ColorOS / OPlus 原生锁屏歌词页面。
+- 愿意在系统更新或播放器大版本更新后，重新确认兼容性。
 
-The APK has a minimum Android API level of 26, but that does not mean every Android 8.0+ device is compatible. The deciding factor is the private OPlus SystemUI implementation on the device. Development and current testing mainly target the ColorOS 16 lyric path. OnePlus, OPPO, and realme devices may behave differently even when their system interfaces look similar.
+项目最低 Android API 为 26，但这不等于所有 Android 8.0 以上设备都能使用。真正决定是否兼容的是手机上的 OPlus SystemUI 实现。当前主要围绕 ColorOS 16 的原生锁屏歌词链路开发和验证；一加、OPPO、真我等设备即使系统名称相近，也可能因为 SystemUI 版本不同而表现不同。
 
-If the ROM has no native lock-screen lyric page, this module will not create a separate floating lyric window.
+如果系统原本没有锁屏歌词页面，本模块不会另外创建一个悬浮歌词窗口。
 
-## 4.x architecture and player compatibility
+## 4.x 架构与播放器适配
 
-Bridge 4.x runs only in `system` and `com.android.systemui`. It no longer enters player processes or receives private Provider broadcasts. Each independent Provider writes lyrics into the player's own `MediaSession` / `MediaMetadata["lyricInfo"]`; Bridge consumes that native ColorOS data and adds styling, word rendering, translation controls, AOD support, and compatibility enhancements.
+Bridge 4.x 只运行在 `system` / `com.android.systemui`，不再进入播放器进程，也不再接收 Provider 私有广播。独立 Provider 在目标播放器进程内把歌词写入播放器自己的 `MediaSession` / `MediaMetadata["lyricInfo"]`；Bridge 只消费这份 ColorOS 原生数据并提供样式、逐字渲染、翻译按钮、AOD 和兼容增强。
 
-Providers and Bridge can be installed independently:
+Provider 与 Bridge 可以独立安装：
 
-- Provider only: ColorOS SystemUI can consume the player's native `lyricInfo` directly.
-- Provider plus Bridge: Bridge adds generic enhancements without submitting a second lyric payload.
-- 4.1 Providers are independent Root / LSPosed modules using libxposed API 102 and static scope.
+- 只安装 Provider：ColorOS SystemUI 可直接消费播放器的原生 `lyricInfo`。
+- 额外安装 Bridge：在原生链路之上增加通用增强；不会再次提交一份歌词。
+- 4.1 Provider 是使用 libxposed API 102 与静态作用域的独立 Root / LSPosed 模块。
 
-| Player | 4.3 Provider module | Lyric capability |
+| 播放器 | 4.3 Provider 模块 | 歌词能力 |
 | --- | --- | --- |
-| Salt Player | `player-salt` | Word timing, translations, public translation CustomAction |
-| ConePlayer (standard and Google Play) | `player-cone` | Full timeline, translations, public translation CustomAction |
-| KuWo Music | `kuwo-music` | Appends word timing and translations to official `lyricInfo` |
-| LX Music (ToSide / Walnut) | `player-lx` | Word timing, translations, Bluetooth identity and artwork compatibility |
-| Poweramp | `player-poweramp` | Sidecar `.lrc` / embedded tags and translations |
-| [Metrolist](https://github.com/metrolistgroup/metrolist) | `player-metrolist` | BetterLyrics / LrcLib / KuGou; no translations |
-| KuGou Music / Concept | `player-kugou` | Appends word timing and type-1 translations to the official payload |
-| QQ Music | `player-qq` | Appends word timing and translations; QQ Music HD is out of scope |
-| NetEase official / Honor / modified 9.0.40 | `player-netease` | Official append or profile-selected constructed word timing and translations |
-| Apple Music | `player-apple` | JNI TTML word timing and translations |
-| Spotify | `player-spotify` | Line- or word-timed Color Lyrics; no translations |
-| QiShui Music | `player-qishui` | Host TrackLyric / cache fallback with word timing and translations |
-| Universal Player | `universal-provider` | Select target MediaSession players in its app; system-server lyric enrichment |
+| Salt Player | `player-salt` | 逐字、翻译、公开翻译 CustomAction |
+| ConePlayer / 光锥音乐（正式版、Google Play 版） | `player-cone` | 完整时间轴、翻译、公开翻译 CustomAction |
+| 酷我音乐 | `kuwo-music` | 官方 `lyricInfo` 追加逐字与翻译 |
+| LX Music（ToSide / Walnut） | `player-lx` | 逐字、翻译、蓝牙歌词身份与封面兼容 |
+| Poweramp | `player-poweramp` | 同目录 `.lrc` / 内嵌标签、翻译 |
+| [Metrolist](https://github.com/metrolistgroup/metrolist) | `player-metrolist` | BetterLyrics / LrcLib / KuGou；不支持翻译 |
+| 酷狗音乐 / 酷狗概念版 | `player-kugou` | 官方 payload 追加逐字与 type-1 翻译 |
+| QQ 音乐官方版 | `player-qq` | 官方 payload 追加逐字与翻译；QQ HD 不在范围 |
+| 网易云官方版 / 荣耀版 / 修改版 9.0.40 | `player-netease` | 官方追加或按运行 profile 构造逐字与翻译 |
+| Apple Music | `player-apple` | JNI TTML 逐字与翻译 |
+| Spotify | `player-spotify` | Color Lyrics 逐行或逐字；不支持翻译 |
+| 汽水音乐 | `player-qishui` | 宿主 TrackLyric / 缓存回退，逐字与翻译 |
+| 通用播放器 | `universal-provider` | 在设置 App 中选择目标 MediaSession 播放器；由 system_server 统一补全歌词 |
 
-The Universal Player Provider runs only in `system_server`; select its target players in its own app.
-Disable Bluetooth/car-lyrics or similar player functions while using it, because those title-overwrite
-paths are currently incompatible. This table describes the current 4.2 implementation and
-device-validation matrix, not permanent compatibility with every future player release.
+通用播放器 Provider 只运行在 `system_server`，在其设置 App 中选择目标播放器。使用它时请关闭
+播放器的蓝牙歌词、车载歌词或类似功能；这些会覆盖标题的路径当前不能同时启用。播放器更新后，
+私有歌词接口仍可能变化。上表表示当前 4.2 代码与真机验收矩阵，不代表未来所有播放器版本永久兼容。
 
-### Universal Player Provider
+### 通用播放器 Provider
 
-`Provider-Universal` is for players without a dedicated adapter that still expose a normal Android
-`MediaSession`. It is not an automatic hook for every app: the module lives only in `system_server`,
-and only packages explicitly selected in its settings app enter observation, lyric lookup, and
-metadata enrichment. Unselected music, video, and other media apps are left untouched.
+`Provider-Universal` 面向没有专用适配、但能正常创建 Android `MediaSession` 的播放器。它不是
+“全应用自动 Hook”：模块只驻留在 `system_server`，只有在 Provider 设置 App 中由用户勾选的包才会
+进入观察、取词与 metadata 补全链路；未勾选的音乐、视频和其他媒体 App 不会被改写。
 
-After installation, open **Universal Player Provider**, select target apps from the player list, and
-then choose lyric-source priority, word timing, translations, raw lyrics, and diagnostics as needed.
-It preserves the host's existing metadata and appends only the standard `MediaMetadata["lyricInfo"]`
-payload to a selected active MediaSession. With Bridge installed, Bridge still owns SystemUI styling,
-AOD behavior, and translation-control enhancements.
+安装后先打开 **Universal Player Provider**，在播放器列表中选择目标 App，再按需要调整歌词来源
+优先级、逐字、翻译、原始歌词和调试选项。它会保留宿主已有 metadata，并只把标准
+`MediaMetadata["lyricInfo"]` 附加到选中的当前 MediaSession；安装 Bridge 后仍由 Bridge 负责
+SystemUI 的外观、AOD 和翻译按钮增强。
 
-Do not enable a dedicated Provider and Universal Provider for the same player. Some Bluetooth or
-car-lyrics features overwrite the media title with the current lyric line; disable them while using
-Universal Provider, or first-track matching, caching, and track-change recognition may be unreliable.
-For issues, provide sanitized Provider/Bridge logs, the selected package, and reproduction steps—never
-complete lyrics, cookies, tokens, or personal media paths.
+请不要同时对同一播放器启用专属 Provider 与通用 Provider。部分播放器的蓝牙歌词、车载歌词会把
+当前歌词行写入媒体标题；请关闭这类功能，否则冷启动首曲、匹配、缓存和切歌识别可能不可靠。遇到
+问题时附上已脱敏的 Provider/Bridge 日志、目标包名和复现步骤，不要上传完整歌词、cookie、token
+或私人媒体路径。
 
-Bridge provides package-only SystemUI lyric-entrance, media-history, and AOD compatibility for
-Halcyon (`com.ella.music`), Flamingo (`yos.music.player`), QZ Music (`love.qz.music`), and
-PrismMusic (`com.lg.sllocalmusic`). This is not lyric-source admission: each player must still
-publish standard `lyricInfo` from its own MediaSession. Old in-app v4 broadcasts are not accepted,
-and no additional Provider APK is required.
+Bridge 已为 Halcyon（`com.ella.music`）、Flamingo（`yos.music.player`）、QZ Music
+（`love.qz.music`）和 PrismMusic（`com.lg.sllocalmusic`）提供纯包名的 SystemUI 歌词入口、
+媒体历史与 AOD 兼容。这不是歌词来源白名单：播放器仍必须从自己的 MediaSession 发布
+标准 `lyricInfo`，旧的应用内 v4 广播不会被接收，也不需要额外 Provider APK。
 
-## Installation
+## 安装
 
-1. Install the required 4.2 Provider APK. For Universal Player, choose target players in its app; for a dedicated Provider, select only its matching music app in LSPosed.
-2. If you want Bridge enhancements, install `ColorOS-Live-Lyrics-Bridge-<version>.apk` and keep its scope limited to `system` and `com.android.systemui`.
-3. Restart the player and SystemUI. Reboot after the first installation or any scope change.
-4. Do not let an old Lyricon Provider and a 4.1 Provider hook the same player.
+1. 安装自己需要的 4.2 Provider APK；通用播放器在其设置 App 中选择目标播放器，专属 Provider 则在 LSPosed 中只勾选对应音乐 App。
+2. 如需 Bridge 增强，再安装 `ColorOS-Live-Lyrics-Bridge-<版本>.apk`，作用域保持 `system` 与 `com.android.systemui`。
+3. 重启目标播放器与 SystemUI；首次安装或改变作用域后建议重启手机。
+4. 不要同时让旧词幕 Provider 与 4.1 Provider hook 同一播放器。
 
-The Provider ZIP in a release is only an APK download bundle, not a Recovery-flashable package.
+Release 中的 Provider ZIP 只是 APK 下载合集，不是 Recovery 刷机包。
 
-For a 3.8.x upgrade, old/new application IDs, exact Provider scopes, unsupported players, backup,
-and downgrade boundaries, read [Migrating from 3.8.x to 4.0](docs/4.0/MIGRATION-3.8-TO-4.0.md).
-Lyricon Providers are obtained from the
-[original LyricProvider project](https://github.com/tomakino/LyricProvider); report Lyricon
-display/product issues there rather than in the Bridge or 4.1 Provider repositories.
+从 3.8.x 升级时，请先阅读[迁移指南](docs/4.0/MIGRATION-3.8-TO-4.0.zh-CN.md)，其中列出
+新旧 applicationId、准确 Provider scope、不再支持的播放器、配置备份与降级边界。
+需要词幕 Provider 时，从
+[LyricProvider 原项目](https://github.com/tomakino/LyricProvider) 获取；词幕显示/产品问题
+向原项目反馈，不由 Bridge 或 4.1 Provider 仓库受理。
 
-## Appearance and behavior
+## 怎么设置外观
 
-Open **ColorOS Live Lyrics Bridge → Settings** from the module page in LSPosed.
+在 LSPosed 的模块页面打开 **ColorOS Live Lyrics Bridge → 设置**。
 
-Choose a preset first, then fine-tune it if needed. Changes update only the preview until you tap **Apply and save**. The settings page also includes:
+你可以先选一个风格预设，再按喜好微调。修改时只会更新预览，点击“应用并保存”后才会真正应用到锁屏。设置页还提供：
 
-- a dedicated **Lyric brightness & fading** page for active/unrevealed text, active translation and translation progress, inactive lyric/translation brightness, a follow-main switch, native RecyclerView edge-fade enable/length, and extra inactive-row fading;
-- per-player translation defaults and remembered translation-button state;
-- guided cleanup of title, credit, and copyright lines at the start of lyrics;
-- progress effects for line-timed lyrics and translations;
-- a character float-up animation in the style of Salt Player: unsung characters rest below the baseline and rise to it as the reveal front reaches them, with an adjustable amount and off by default; it works with word-timed lyrics and with ordinary line-timed lyrics when Line-timed lyric progress is enabled, and is disabled on the low frame rate always-on display;
-- vertical browsing for long lyrics and horizontal scrolling for long translations;
-- 60 / 90 / 120 Hz lyric redraw limits;
-- keep-screen-awake control with an optional custom duration.
+- 独立的“歌词亮度与渐隐”页面：实时/未高亮/翻译/翻译进度亮度、非实时正文与翻译跟随或独立亮度、RecyclerView 原生上下渐隐开关/长度、非活动行额外淡化；
+- 播放器翻译默认值和翻译按钮记忆；
+- 歌词开头信息清理；
+- 普通逐行歌词进度与翻译进度；
+- 字符上浮动画：未唱字符沉在基线下方，揭示前沿经过时升到正常基线并停住（Salt Player 式），幅度可调，默认关闭；逐字歌词生效，开启普通逐行歌词进度后普通逐行歌词同样生效，息屏低帧率下自动关闭；
+- 长歌词纵向浏览与长翻译横向滚动；
+- 60 / 90 / 120 Hz 歌词刷新上限；
+- “歌词显示时保持屏幕点亮”和自定义时长。
 
-The refresh-rate setting limits lyric drawing only. It does not force the display to remain at a high refresh rate.
+设置页里的刷新率只限制歌词绘制，不会强制屏幕一直以高刷新率运行。
 
-The four presets explicitly own the new brightness and fading fields. Changing any preset-owned color, typography, motion, brightness, or fading value marks the result as **Custom**. Soft and Vivid retain the legacy 90% inactive-row fade that previously followed blur/scaling; Default and Minimal leave the extra row fade off.
+默认、柔和、醒目、极简四套预设会显式设置新增亮度与渐隐字段；任一预设管理的颜色、排版、动效、亮度或渐隐参数发生偏离后，都会识别为“自定义”。柔和与醒目保留旧版随模糊/缩放启用的 90% 非活动行淡化，默认与极简关闭额外行淡化。
 
-The main settings page has a separate **Bridge configuration backup & restore** entry. It copies and restores both Bridge preference domains, covering the main UI, global/per-player translation settings, opening-cleanup rules and corrections, debug settings, and settings language. A full reset is available there after confirmation. Downgrading from a schema-v3 build is not lossless: older codecs may reject the saved configuration, so create a complete Bridge backup first and be prepared to reset the older app's settings.
+主设置页提供独立的“Bridge 配置备份与恢复”入口。它会备份和恢复 Bridge 的两个配置域，覆盖主 UI、全局/逐播放器翻译设置、开头清理规则与逐曲修正、调试设置和设置页语言；页面内也提供二次确认后的全量重置。schema v3 无法保证无损降级：旧 codec 可能拒绝已保存配置，因此降级前应先创建完整 Bridge 备份，并准备在旧版中重置设置。
 
-See [Bridge 4.0 lyric visual controls](docs/4.0/LYRIC-VISUAL-CONTROLS.md) for the exact defaults, preset matrix, migration behavior, and downgrade boundary.
+完整默认值、预设矩阵、迁移规则与降级边界见 [Bridge 4.0 歌词亮度与渐隐设置说明](docs/4.0/LYRIC-VISUAL-CONTROLS.md)。
 
-## Troubleshooting
+## 常见问题
 
-### No lyrics appear at all
+### 安装后完全没有歌词
 
-Check that the ROM has the native lyric page, that the Bridge keeps its recommended scope, and that the target player does not need a separate Provider. Force stop and reopen the player; reboot the device if the issue remains.
+先确认三件事：系统原生锁屏歌词页面是否存在、Bridge 是否使用推荐作用域、目标播放器是否需要单独安装 Provider。完成后强行停止音乐 App；如果仍无效，再重启手机。
 
-### Line lyrics work, but word highlighting or translations do not
+### 有普通歌词，但没有逐字或翻译
 
-The current player or track probably supplies line-timed lyrics only. Word timing and translations cannot be generated from nothing; they must exist in the lyric source. The current Spotify Provider intentionally supplies original lyrics only.
+这通常表示当前播放器或当前歌曲只提供了逐行歌词。逐字和翻译不能凭空生成；它们取决于歌词源本身是否包含对应数据。Spotify Provider 当前就是仅原文歌词。
 
-### The previous track remains visible, or “No lyrics” appears after switching tracks
+### 切歌后还是上一首，或显示“暂无歌词”
 
-Make sure the Bridge and all Providers came from the same release. Version mismatches are a common cause of inconsistent track timing. Then force stop the player and restart SystemUI; reboot after any scope change.
+请先确认 Bridge 与所有 Provider 都来自同一个 Release。混用不同版本最容易出现切歌时序不一致。随后强行停止播放器并重启系统界面；涉及作用域变化时直接重启手机。
 
-### A system update breaks the module
+### 系统更新后失效
 
-The ColorOS lyric page is a private vendor SystemUI feature and can change between updates. Open an [issue](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/issues) with the device model, OS version, SystemUI version, player version, and relevant LSPosed logs.
+ColorOS 的锁屏歌词属于厂商私有 SystemUI 功能，系统更新可能改变内部结构。请在 [Issues](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/issues) 中附上手机型号、系统版本、SystemUI 版本、播放器版本和 LSPosed 日志。
 
-### Does the module modify music files or upload lyrics?
+### 会不会修改音乐文件或上传歌词？
 
-Bridge only reads native lyrics from the player's MediaSession and enhances their SystemUI presentation. It does not modify music files. Whether lyrics are fetched online depends on the player or its Provider.
+Bridge 只读取本机播放器 MediaSession 中的原生歌词并增强 SystemUI 显示，不会修改音乐文件。是否联网获取歌词取决于对应播放器或 Provider 的实现。
 
-## For player developers
+## 给播放器开发者
 
-If your player already has a full lyric timeline, the preferred integration is to publish the public `MediaMetadata["lyricInfo"]` payload. Users then need only the Bridge, with no player-specific Provider, and your app does not need a compile-time dependency on the module APK.
+如果你的播放器已经有完整时间轴歌词，推荐直接发布公开的 `MediaMetadata["lyricInfo"]` 数据。这样用户只需安装 Bridge，不必再安装专用 Provider，播放器本身也不需要依赖模块 APK。
 
-- [Player integration protocol](docs/PLAYER_INTEGRATION.md)
 - [播放器接入协议（中文）](docs/PLAYER_INTEGRATION.zh-CN.md)
-- [Provider adaptation guide](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Providers/blob/4.1/docs/4.0/PROVIDER-ADAPTATION-GUIDE.md)
-- [4.0 migration guide](docs/4.0/MIGRATION-3.8-TO-4.0.md)
-- [Bridge and LyricProvider responsibilities (Chinese)](docs/LYRIC_PROVIDER_BRIDGE.zh-CN.md)
-- [Dynamic artwork Provider and Bridge design (Chinese)](docs/DYNAMIC-ARTWORK-PROVIDER-PLAN.zh-CN.md)
-- [Dynamic artwork implementation status (Chinese)](docs/DYNAMIC-ARTWORK-IMPLEMENTATION.zh-CN.md)
-- [Dynamic Artwork Provider source (lives in the Providers repository)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Providers/blob/main/artwork-provider-am/README.md) and its [protocol contract](artwork-contract/README.md)
+- [Player integration protocol (English)](docs/PLAYER_INTEGRATION.md)
+- [Provider 适配技术指南](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Providers/blob/4.1/docs/4.0/PROVIDER-ADAPTATION-GUIDE.zh-CN.md)
+- [3.8.x → 4.0 迁移指南](docs/4.0/MIGRATION-3.8-TO-4.0.zh-CN.md)
+- [Bridge 与 LyricProvider 的职责说明](docs/LYRIC_PROVIDER_BRIDGE.zh-CN.md)
 
-## Building locally
+## 本地构建
 
-JDK 21 is required. The app still emits Java 17 bytecode for Android compatibility.
+需要 JDK 21。项目输出仍使用 Java 17 字节码，以保持 Android 兼容性。
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 .\scripts\validate-release-contract.ps1 -ProviderRepoRoot ..\ColorOS-Live-Lyrics-Providers
 ```
 
-The debug APK is written to `app\build\outputs\apk\debug\app-debug.apk`.
+Debug APK 位于 `app\build\outputs\apk\debug\app-debug.apk`。
 
-## Support the project
+## 支持项目
 
-If the project is useful to you, you can support future compatibility work through WeChat or Alipay.
+如果这个项目对你有帮助，欢迎通过微信或支付宝支持后续适配。
 
 <p align="center">
-  <img src="PY_QR.png" alt="WeChat and Alipay support QR code" width="600" height="400">
+  <img src="PY_QR.png" alt="微信和支付宝支持二维码" width="600" height="400">
 </p>
 
-## License and acknowledgements
+## 开源协议与致谢
 
-Copyright 2026 Andrea-lyz. Licensed under the [Apache License 2.0](LICENSE).
+Copyright 2026 Andrea-lyz。本项目采用 [Apache License 2.0](LICENSE) 开源。
 
-The project uses [Accompanist Lyrics Core](https://github.com/6xingyv/accompanist-lyrics-core) to parse lyric timelines. Optional Providers build on the [tomakino/LyricProvider](https://github.com/tomakino/LyricProvider) ecosystem. Thanks to the authors and contributors of both projects.
+项目使用 [Accompanist Lyrics Core](https://github.com/6xingyv/accompanist-lyrics-core) 解析时间轴歌词；可选 Provider 基于 [tomakino/LyricProvider](https://github.com/tomakino/LyricProvider) 生态扩展。感谢相关项目的作者与贡献者。
 
-Thanks as well to [Lyrico](https://github.com/Replica0110/Lyrico) and
-[Lyrico-Plugins](https://github.com/Replica0110/Lyrico-Plugins) for their open-source work on
-local music metadata, lyric management, and plugin-based lyric sources.
+同时感谢 [Lyrico](https://github.com/Replica0110/Lyrico) 与
+[Lyrico-Plugins](https://github.com/Replica0110/Lyrico-Plugins) 在本地音乐元数据、歌词管理和
+插件化歌词源方面提供的开源工作与启发。
 
-Android, ColorOS, OPlus, LSPosed, and all music-app names are trademarks of their respective owners. This project is not affiliated with or endorsed by those vendors.
+Android、ColorOS、OPlus、LSPosed 以及各音乐 App 名称的商标权归各自权利人所有。本项目与这些产品的官方团队没有隶属或背书关系。
+
+## Readify 句子窗口（提案）
+
+Readify 在线朗读适配及事件驱动高亮见 [协议与验证说明](docs/SENTENCE_WINDOWS.md)。需要配套 Provider；Bridge 的系统作用域不变。
