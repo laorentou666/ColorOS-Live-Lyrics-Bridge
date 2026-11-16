@@ -5,7 +5,10 @@ package io.github.andrealtb.lockscreenlyrics.online
 import java.util.Locale
 import kotlin.math.abs
 
-data class LyricTrack(val title: String, val artist: String, val album: String, val duration: Long)
+data class LyricTrack @JvmOverloads constructor(
+    val title: String, val artist: String, val album: String, val duration: Long,
+    val neteaseSongId: String = ""
+)
 data class LyricSong(val id: String, val mid: String, val track: LyricTrack)
 data class LyricWord(val text: String, val start: Long, val end: Long)
 data class LyricLine(

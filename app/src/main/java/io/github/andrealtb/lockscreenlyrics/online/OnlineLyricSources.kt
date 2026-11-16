@@ -87,8 +87,17 @@ class OnlineLyricSources @JvmOverloads constructor(private val http: LyricHttp =
     fun searchNetease(track: LyricTrack, request: LyricRequest): LyricSong? {
         val data = netease("/api/search/get", json("s" to keyword(track), "type" to 1, "limit" to 20, "offset" to 0), request)
         return best(track, data.optJSONObject("result")?.optJSONArray("songs").objects().map { song ->
-            LyricSong(song.optString("id"), "", LyricTrack(song.optString("name"), singers(song.optJSONArray("artists")),
-                song.optJSONObject("album")?.optString("name").orEmpty(), song.optLong("duration")))
+            val candidate = LyricTrack(song.optString("name"), singers(song.optJSONArray("artists")),
+                song.optJSONObject("album")?.optString("name").orEmpty(), song.optLong("duration"))
+            // NetEase MediaSession titles can include an alias that search returns separately.
+            val titles = song.optJSONArray("alias")?.let { aliases ->
+                (0 until aliases.length()).map {
+                    candidate.copy(title = "${candidate.title} (${aliases.optString(it)})")
+                }
+            }.orEmpty()
+            LyricSong(song.optString("id"), "", (listOf(candidate) + titles).maxBy {
+                OnlineLyricSelection.score(track, it)
+            })
         })
     }
 
@@ -200,8 +209,19 @@ class OnlineLyricSources @JvmOverloads constructor(private val http: LyricHttp =
         return null
     }
 
-    /** Launch platform searches together; share matched IDs with the concurrent AMLL branches. */
     fun fetchAll(track: LyricTrack, request: LyricRequest, executor: Executor): CompletableFuture<List<OnlineLyric>> {
+        if (track.neteaseSongId.isEmpty()) return fetchSearchResults(track, request, executor)
+        return CompletableFuture.supplyAsync({
+            fetchTtml("netease", LyricSong(track.neteaseSongId, "", track), track, request)
+        }, executor).thenCompose { lyric ->
+            request.check()
+            if (lyric != null) CompletableFuture.completedFuture(listOf(lyric))
+            else fetchSearchResults(track, request, executor)
+        }
+    }
+
+    /** Launch platform searches together; share matched IDs with the concurrent AMLL branches. */
+    private fun fetchSearchResults(track: LyricTrack, request: LyricRequest, executor: Executor): CompletableFuture<List<OnlineLyric>> {
         fun <T> async(block: () -> T): CompletableFuture<T?> = CompletableFuture.supplyAsync({
             request.check()
             runCatching(block).getOrNull()

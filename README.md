@@ -2,11 +2,14 @@
 
 **Fork changes**
 
+- Use a valid NetEase MediaSession song ID to fetch AMLL TTML first, then fall back to the existing search pipeline. NetEase search also matches aliases published in display titles.
 - Support NetEase 7.2.22 through online lyrics during pause, resume and seek rebuilds, with user-confirmed device testing. Preserve the native lyric repair used by 9.0.40. See the [repair record](docs/PLAYER_STATE_LYRIC_REPAIR.md).
 - Fix failed lyric retrieval: ColorOS 16 player-state rebuilds republish media data with an empty lyric model, so Bridge reloads native lyrics through `loadLyricInBg` before publication; when MediaSession omits lyrics, Bridge fetches NetEase, QQ Music, Kugou and AMLL TTML in parallel and injects the verified track timeline into the lock-screen pipeline.
 - Fetch lyrics from NetEase Cloud Music, QQ Music, Kugou and AMLL TTML in parallel, with YRC/QRC/KRC/TTML/LRC and translation support.
 - Select by timing quality and track match, then the source order set in Bridge settings; ordering changes are saved and applied immediately.
 - Adapt TTML backing vocals, duets and translations to the lock-screen timeline. Keep the existing rendering and player-state fixes, with the original lyric pipeline as fallback.
+
+This fork maintains NetEase Cloud Music compatibility (7.2.22 and 9.0.40). Other players retain the upstream Provider and display features; online matching uses the existing metadata search on a best-effort basis, with the original lyric pipeline as fallback. Player-specific fixes for other platforms are outside this fork's maintenance scope.
 
 [![Build Debug APK](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml/badge.svg)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml)
 [![Latest release](https://img.shields.io/github/v/release/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/releases/latest)

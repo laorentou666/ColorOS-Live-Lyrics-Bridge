@@ -29,7 +29,10 @@ class OnlineLyricRuntime @JvmOverloads constructor(fetcher: LyricFetcher? = null
         metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().ifBlank { metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE).orEmpty() },
         metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty().ifBlank {
             metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST).orEmpty().ifBlank { metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE).orEmpty() }
-        }, metadata.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty(), metadata.getLong(MediaMetadata.METADATA_KEY_DURATION))
+        }, metadata.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty(), metadata.getLong(MediaMetadata.METADATA_KEY_DURATION),
+        if (player == "com.netease.cloudmusic") {
+            metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)?.toLongOrNull()?.takeIf { it > 0 }?.toString().orEmpty()
+        } else "")
 
     private fun identity(mediaKey: String, metadata: MediaMetadata): String = listOf(mediaKey,
         metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID).orEmpty(), track(metadata).toString()).joinToString("\u0000")

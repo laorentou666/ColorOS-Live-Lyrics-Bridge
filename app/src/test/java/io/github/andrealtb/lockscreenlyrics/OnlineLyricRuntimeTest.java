@@ -71,6 +71,46 @@ public class OnlineLyricRuntimeTest {
         assertEquals(2, pending.size());
     }
 
+    @Test public void neteaseMediaIdIsForwardedAndOnlineReplayKeepsTheSameLookup() {
+        List<LyricTrack> tracks = new ArrayList<>();
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) -> {
+            tracks.add(track);
+            return CompletableFuture.completedFuture(Collections.singletonList(lyric()));
+        });
+        MediaMetadata original = new MediaMetadata.Builder(legacyMetadata("A"))
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "1824020871").build();
+        List<MediaMetadata> updates = new ArrayList<>();
+        runtime.observe("com.netease.cloudmusic", "media-key", original, updates::add);
+        shadowOf(Looper.getMainLooper()).idle();
+        runtime.observe("com.netease.cloudmusic", "media-key", updates.get(0), updates::add);
+        assertEquals(1, tracks.size());
+        assertEquals("1824020871", tracks.get(0).getNeteaseSongId());
+        assertNotNull(runtime.resolveForPlayerRebuild("media-key", original, "A", "Artist"));
+        runtime.observe("com.netease.cloudmusic", "media-key", new MediaMetadata.Builder(original)
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "1910937515").build(), updates::add);
+        assertEquals(2, tracks.size());
+        assertEquals("1910937515", tracks.get(1).getNeteaseSongId());
+        assertNull(runtime.resolveForPlayerRebuild("media-key", original, "A", "Artist"));
+    }
+
+    @Test public void otherPlayersAndInvalidNeteaseIdsKeepMetadataSearch() {
+        List<LyricTrack> tracks = new ArrayList<>();
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) -> {
+            tracks.add(track);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        });
+        MediaMetadata original = new MediaMetadata.Builder(legacyMetadata("A"))
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "1824020871").build();
+        runtime.observe("com.apple.android.music", "apple-key", original, value -> {});
+        runtime.observe("com.spotify.music", "spotify-key", original, value -> {});
+        for (String id : Arrays.asList("", "0", "-1", "song_1824020871", "9223372036854775808")) {
+            runtime.observe("com.netease.cloudmusic", "media-key", new MediaMetadata.Builder(original)
+                    .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, id).build(), value -> {});
+        }
+        assertEquals(7, tracks.size());
+        assertTrue(tracks.stream().allMatch(track -> track.getNeteaseSongId().isEmpty()));
+    }
+
     @Test public void legacyMetadataGetsAnOnlineIdentityAcceptedByPlayerStateRepair() {
         OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) ->
                 CompletableFuture.completedFuture(Collections.singletonList(lyric())));
