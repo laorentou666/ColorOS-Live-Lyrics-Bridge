@@ -23,14 +23,21 @@ class OnlineLyricSession(private val fetcher: LyricFetcher, private val changed:
         val token = ++generation
         candidates = emptyList()
         selected = null
-        val scope = LyricRequest()
+        val scope = LyricRequest(Consumer { lyric ->
+            synchronized(this) {
+                if (generation == token) {
+                    candidates = candidates + lyric
+                    select()
+                }
+            }
+        })
         request = scope
         if (track.title.isBlank()) return null
         try {
             fetcher.fetch(track, scope).whenComplete { results, _ ->
                 synchronized(this) {
                     if (generation == token) {
-                        candidates = results.orEmpty()
+                        candidates = results ?: candidates
                         select()
                     }
                 }

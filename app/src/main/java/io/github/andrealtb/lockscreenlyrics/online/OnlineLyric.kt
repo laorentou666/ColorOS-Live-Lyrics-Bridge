@@ -81,7 +81,8 @@ object OnlineLyricSelection {
     /** Stable tie-breaking is independent of completion order and uses the latest preference. */
     @JvmStatic fun best(results: List<OnlineLyric>, order: List<String>): OnlineLyric? = results
         .filter { it.score >= 0 && it.lines.isNotEmpty() }
-        .sortedWith(compareByDescending<OnlineLyric> { it.quality }.thenByDescending { it.score }
+        .sortedWith(compareByDescending<OnlineLyric> { it.source == "amll" }
+            .thenByDescending { it.quality }.thenByDescending { it.score }
             .thenBy { order.indexOf(it.source).let { rank -> if (rank < 0) order.size else rank } })
         .firstOrNull()
 }

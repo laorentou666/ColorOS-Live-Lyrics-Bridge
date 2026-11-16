@@ -60,6 +60,34 @@ public class OnlineLyricRuntimeTest {
         assertSame(second, runtime.apply("key", second));
     }
 
+    @Test public void partialResultsRefreshMetadataBeforeCompletionAndAmllSurvivesLaterPlatformResults() {
+        CompletableFuture<List<OnlineLyric>> pending = new CompletableFuture<>();
+        List<LyricRequest> requests = new ArrayList<>();
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) -> {
+            requests.add(request);
+            return pending;
+        });
+        MediaMetadata original = legacyMetadata("A");
+        List<MediaMetadata> updates = new ArrayList<>();
+        runtime.observe("player", "key", original, updates::add);
+        requests.get(0).publish(lyric());
+        shadowOf(Looper.getMainLooper()).idle();
+        assertFalse(pending.isDone());
+        assertEquals("bridge-online:netease", LyricInfoContract.parse(updates.get(0).getString("lyricInfo")).source);
+
+        OnlineLyric amll = new OnlineLyric("amll", "ttml", 18,
+                OnlineLyricParser.parse("ttml", "<tt><body><p begin='1s' end='2s'>TTML</p></body></tt>"));
+        requests.get(0).publish(amll);
+        requests.get(0).publish(new OnlineLyric("qqmusic", "yrc", 20, lyric().getLines()));
+        pending.complete(Arrays.asList(lyric(), amll));
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(2, updates.size());
+        assertEquals("bridge-online:amll", LyricInfoContract.parse(updates.get(1).getString("lyricInfo")).source);
+        assertEquals("content://player/cover", updates.get(1).getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI));
+        assertEquals("bridge-online:amll", LyricInfoContract.parse(runtime.resolveForPlayerRebuild(
+                "key", original, "A", "Artist").getString("lyricInfo")).source);
+    }
+
     @Test public void metadataEnrichmentStartsNewLookup() {
         List<CompletableFuture<List<OnlineLyric>>> pending = new ArrayList<>();
         OnlineLyricRuntime runtime = new OnlineLyricRuntime((track, request) -> {

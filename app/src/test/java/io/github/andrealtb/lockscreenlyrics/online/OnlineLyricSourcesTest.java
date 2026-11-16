@@ -8,27 +8,55 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class OnlineLyricSourcesTest {
-    @Test public void knownNeteaseIdFetchesTtmlWithoutSearching() throws Exception {
-        List<String> urls = new ArrayList<>();
+    @Test public void knownNeteaseIdDisplaysPlatformLyricsWhileAmllIsPendingThenReplacesThem() throws Exception {
+        List<String> urls = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch amllStarted = new CountDownLatch(1);
+        CountDownLatch releaseAmll = new CountDownLatch(1);
+        CountDownLatch platformDisplayed = new CountDownLatch(1);
         String response = new JSONObject().put("data", new JSONObject().put("lyrics",
-                "<tt><body><p begin='1s' end='2s'><span begin='1s' end='2s'>TTML</span></p></body></tt>")).toString();
+                "<tt><body><p begin='1s' end='2s'>TTML</p></body></tt>")).toString();
         OnlineLyricSources sources = new OnlineLyricSources((url, body, headers, scope) -> {
             urls.add(url);
-            return response;
+            if (url.contains("api.amll.dev")) {
+                amllStarted.countDown();
+                try { assertTrue(releaseAmll.await(5, TimeUnit.SECONDS)); }
+                catch (InterruptedException e) { throw new AssertionError(e); }
+                return response;
+            }
+            if (url.contains("/lyric/v1")) return "{\"yrc\":{\"lyric\":\"[1000,1000](1000,1000,0)Platform\"}}";
+            return "{}";
         });
         ExecutorService executor = Executors.newFixedThreadPool(6);
+        List<CompletableFuture<List<OnlineLyric>>> pending = new ArrayList<>();
+        List<OnlineLyric> published = new CopyOnWriteArrayList<>();
+        OnlineLyricSession session = new OnlineLyricSession((track, request) -> {
+            CompletableFuture<List<OnlineLyric>> future = sources.fetchAll(track, request, executor);
+            pending.add(future);
+            return future;
+        }, lyric -> {
+            published.add(lyric);
+            if (lyric.getSource().equals("netease")) platformDisplayed.countDown();
+        });
         try {
-            List<OnlineLyric> results = sources.fetchAll(new LyricTrack(
+            session.setOrder("netease,qqmusic,kugou,amll");
+            session.observe("A", new LyricTrack(
                     "One Last Kiss (动画电影《新世纪福音战士新剧场版：终》主题曲)", "宇多田ヒカル",
-                    "One Last Kiss", 252026, "1824020871"), new LyricRequest(), executor).get(5, TimeUnit.SECONDS);
-            assertEquals(Collections.singletonList("https://api.amll.dev/v1/lyrics/get?ncmMusicId=1824020871"), urls);
-            assertEquals(1, results.size());
-            assertEquals("amll", results.get(0).getSource());
-            assertEquals("TTML", results.get(0).getLines().get(0).getText());
-        } finally { executor.shutdownNow(); }
+                    "One Last Kiss", 252026, "1824020871"));
+            assertTrue(amllStarted.await(3, TimeUnit.SECONDS));
+            assertTrue("platform lyrics must display before AMLL completes", platformDisplayed.await(3, TimeUnit.SECONDS));
+            assertFalse(pending.get(0).isDone());
+            assertEquals("netease", session.current("A").getSource());
+            releaseAmll.countDown();
+            assertEquals(2, pending.get(0).get(5, TimeUnit.SECONDS).size());
+            assertEquals("amll", session.current("A").getSource());
+            assertEquals("TTML", session.current("A").getLines().get(0).getText());
+            assertEquals(2, published.size());
+            assertTrue(urls.contains("https://api.amll.dev/v1/lyrics/get?ncmMusicId=1824020871"));
+            assertFalse(urls.stream().anyMatch(url -> url.contains("/search/get")));
+        } finally { releaseAmll.countDown(); executor.shutdownNow(); }
     }
 
-    @Test public void unavailableOrInvalidDirectTtmlFallsBackToPlatformSearch() throws Exception {
+    @Test public void unavailableOrInvalidDirectTtmlKeepsPlatformLyrics() throws Exception {
         for (String response : Arrays.asList("{}", "{\"data\":{\"lyrics\":\"invalid TTML\"}}", "offline")) {
             List<String> urls = Collections.synchronizedList(new ArrayList<>());
             OnlineLyricSources sources = new OnlineLyricSources((url, body, headers, scope) -> {
@@ -45,8 +73,8 @@ public class OnlineLyricSourcesTest {
             try {
                 List<OnlineLyric> results = sources.fetchAll(new LyricTrack("Song", "Artist", "", 180000, "123"),
                         new LyricRequest(), executor).get(5, TimeUnit.SECONDS);
-                assertEquals("https://api.amll.dev/v1/lyrics/get?ncmMusicId=123", urls.get(0));
-                assertTrue(urls.stream().anyMatch(url -> url.contains("/search/get")));
+                assertTrue(urls.contains("https://api.amll.dev/v1/lyrics/get?ncmMusicId=123"));
+                assertFalse(urls.stream().anyMatch(url -> url.contains("/search/get")));
                 assertTrue(urls.stream().anyMatch(url -> url.contains("musics.fcg")));
                 assertTrue(urls.stream().anyMatch(url -> url.contains("mobilecdn")));
                 assertEquals(1, results.size());
@@ -56,20 +84,20 @@ public class OnlineLyricSourcesTest {
         }
     }
 
-    @Test public void cancellingDirectTtmlDoesNotStartFallbackSearch() throws Exception {
+    @Test public void cancellingRequestStopsQueuedSourcesAndPublication() throws Exception {
         List<String> urls = new ArrayList<>();
-        LyricRequest request = new LyricRequest();
+        LyricRequest request = new LyricRequest(lyric -> fail("cancelled lyrics must not be published"));
         OnlineLyricSources sources = new OnlineLyricSources((url, body, headers, scope) -> {
             urls.add(url);
             scope.cancel();
             return "{}";
         });
-        ExecutorService executor = Executors.newFixedThreadPool(6);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             try {
                 sources.fetchAll(new LyricTrack("Song", "Artist", "", 180000, "123"), request, executor)
                         .get(5, TimeUnit.SECONDS);
-                fail("cancelled track must not start fallback searches");
+                fail("cancelled track must stop queued sources");
             } catch (ExecutionException expected) {
                 assertTrue(expected.getCause() instanceof CancellationException);
             }
@@ -97,8 +125,11 @@ public class OnlineLyricSourcesTest {
 
     @Test public void allSourcesRunInParallelAndAmllReusesValidatedIds() throws Exception {
         CountDownLatch searches = new CountDownLatch(3);
+        CountDownLatch releaseQq = new CountDownLatch(1);
+        CountDownLatch platformAvailable = new CountDownLatch(1);
         AtomicInteger count = new AtomicInteger();
         List<String> urls = Collections.synchronizedList(new ArrayList<>());
+        List<OnlineLyric> published = new CopyOnWriteArrayList<>();
         String krc = OnlineLyricCryptoTest.krc("[1000,2000]<100,400,0>你<600,900,0>好");
         OnlineLyricSources sources = new OnlineLyricSources((url, body, headers, scope) -> {
             urls.add(url);
@@ -111,6 +142,7 @@ public class OnlineLyricSourcesTest {
                 if (url.contains("/search/get")) return "{\"result\":{\"songs\":[{\"id\":123,\"name\":\"Song\",\"artists\":[{\"name\":\"Artist\"}],\"album\":{\"name\":\"Album\"},\"duration\":180000}]}}";
                 if (url.contains("/lyric/v1")) return "{\"yrc\":{\"lyric\":\"[1000,2000](1000,1000,0)你好\"},\"ytlrc\":{\"lyric\":\"[00:01]Hello\"}}";
                 if (url.contains("musics.fcg")) {
+                    assertTrue(releaseQq.await(5, TimeUnit.SECONDS));
                     assertTrue(url.endsWith(LyricCrypto.qqSign(body)));
                     JSONObject param = new JSONObject(body).getJSONObject("request").getJSONObject("param");
                     assertEquals("Song Artist", param.getString("query"));
@@ -130,14 +162,23 @@ public class OnlineLyricSourcesTest {
         });
         ExecutorService executor = Executors.newFixedThreadPool(6);
         try {
-            List<OnlineLyric> results = sources.fetchAll(new LyricTrack("Song", "Artist", "Album", 180000), new LyricRequest(), executor).get(5, TimeUnit.SECONDS);
+            CompletableFuture<List<OnlineLyric>> pending = sources.fetchAll(new LyricTrack("Song", "Artist", "Album", 180000),
+                    new LyricRequest(lyric -> {
+                        published.add(lyric);
+                        if (lyric.getSource().equals("netease")) platformAvailable.countDown();
+                    }), executor);
+            assertTrue("completed lyrics must publish while another platform is still searching", platformAvailable.await(3, TimeUnit.SECONDS));
+            assertFalse(pending.isDone());
+            releaseQq.countDown();
+            List<OnlineLyric> results = pending.get(5, TimeUnit.SECONDS);
             assertEquals(3, count.get());
             assertEquals(5, results.size());
+            assertEquals(new HashSet<>(results), new HashSet<>(published));
             Set<String> formats = new HashSet<>(); for (OnlineLyric result : results) formats.add(result.getFormat());
             assertEquals(new HashSet<>(Arrays.asList("yrc", "qrc", "krc", "ttml")), formats);
             assertTrue(urls.stream().anyMatch(u -> u.endsWith("ncmMusicId=123")));
             assertTrue(urls.stream().anyMatch(u -> u.endsWith("qqMusicId=qqmid")));
-        } finally { executor.shutdownNow(); }
+        } finally { releaseQq.countDown(); executor.shutdownNow(); }
     }
 
     @Test public void wrongArtistPreventsFetchingLyricsAndTtml() {

@@ -36,6 +36,44 @@ public class OnlineLyricSessionTest {
         assertEquals(Arrays.asList("qqmusic", "amll", "netease", "kugou"), OnlineLyricSelection.order("qqmusic,unknown,qqmusic"));
     }
 
+    @Test public void amllArrivingFirstRemainsSelectedWhenPlatformLyricsFinishLater() {
+        CompletableFuture<List<OnlineLyric>> pending = new CompletableFuture<>();
+        List<LyricRequest> requests = new ArrayList<>();
+        List<OnlineLyric> published = new ArrayList<>();
+        OnlineLyricSession session = new OnlineLyricSession((t, request) -> {
+            requests.add(request);
+            return pending;
+        }, published::add);
+        session.setOrder("netease,qqmusic,kugou,amll");
+        session.observe("A", track);
+        OnlineLyric amll = new OnlineLyric("amll", "ttml", 4,
+                OnlineLyricParser.parse("ttml", "<tt><body><p begin='1s' end='2s'>TTML</p></body></tt>"));
+        OnlineLyric platform = lyric("netease", "yrc", 20);
+        requests.get(0).publish(amll);
+        assertEquals(amll, session.current("A"));
+        requests.get(0).publish(platform);
+        pending.complete(Arrays.asList(platform, amll));
+        session.setOrder("qqmusic,netease,kugou,amll");
+        assertEquals(Collections.singletonList(amll), published);
+        assertEquals(amll, session.current("A"));
+    }
+
+    @Test public void failedRemainingSourcesKeepAlreadyPublishedLyrics() {
+        CompletableFuture<List<OnlineLyric>> pending = new CompletableFuture<>();
+        List<LyricRequest> requests = new ArrayList<>();
+        List<OnlineLyric> published = new ArrayList<>();
+        OnlineLyricSession session = new OnlineLyricSession((t, request) -> {
+            requests.add(request);
+            return pending;
+        }, published::add);
+        session.observe("A", track);
+        OnlineLyric platform = lyric("netease", "yrc", 20);
+        requests.get(0).publish(platform);
+        pending.completeExceptionally(new java.io.IOException());
+        assertEquals(platform, session.current("A"));
+        assertEquals(Collections.singletonList(platform), published);
+    }
+
     @Test public void lateAResultCannotReplaceBOrTheNextA() {
         List<CompletableFuture<List<OnlineLyric>>> pending = new ArrayList<>();
         List<LyricRequest> requests = new ArrayList<>();
@@ -46,6 +84,10 @@ public class OnlineLyricSessionTest {
         assertNull(session.observe("A", track));
         session.observe("B", track);
         session.observe("A", track);
+        try {
+            requests.get(0).publish(lyric("amll", "yrc", 20));
+            fail("cancelled scope must not publish an old AMLL result");
+        } catch (CancellationException expected) { }
         pending.get(0).complete(Collections.singletonList(lyric("netease", "yrc", 20)));
         pending.get(1).complete(Collections.singletonList(lyric("qqmusic", "yrc", 20)));
         assertNull(session.current("A"));

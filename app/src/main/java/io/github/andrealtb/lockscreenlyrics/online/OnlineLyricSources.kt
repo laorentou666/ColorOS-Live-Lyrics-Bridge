@@ -14,12 +14,14 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.function.Consumer
 import java.util.zip.GZIPInputStream
 
-class LyricRequest {
+class LyricRequest @JvmOverloads constructor(private val found: Consumer<OnlineLyric> = Consumer {}) {
     private val connections = Collections.synchronizedSet(mutableSetOf<HttpURLConnection>())
     private val stopped = AtomicBoolean(false)
     fun check() { if (stopped.get()) throw CancellationException() }
+    fun publish(lyric: OnlineLyric) { check(); found.accept(lyric) }
     internal fun attach(connection: HttpURLConnection) { connections.add(connection); check() }
     internal fun detach(connection: HttpURLConnection) { connections.remove(connection) }
     fun cancel() {
@@ -209,31 +211,27 @@ class OnlineLyricSources @JvmOverloads constructor(private val http: LyricHttp =
         return null
     }
 
-    fun fetchAll(track: LyricTrack, request: LyricRequest, executor: Executor): CompletableFuture<List<OnlineLyric>> {
-        if (track.neteaseSongId.isEmpty()) return fetchSearchResults(track, request, executor)
-        return CompletableFuture.supplyAsync({
-            fetchTtml("netease", LyricSong(track.neteaseSongId, "", track), track, request)
-        }, executor).thenCompose { lyric ->
-            request.check()
-            if (lyric != null) CompletableFuture.completedFuture(listOf(lyric))
-            else fetchSearchResults(track, request, executor)
-        }
-    }
-
     /** Launch platform searches together; share matched IDs with the concurrent AMLL branches. */
-    private fun fetchSearchResults(track: LyricTrack, request: LyricRequest, executor: Executor): CompletableFuture<List<OnlineLyric>> {
+    fun fetchAll(track: LyricTrack, request: LyricRequest, executor: Executor): CompletableFuture<List<OnlineLyric>> {
         fun <T> async(block: () -> T): CompletableFuture<T?> = CompletableFuture.supplyAsync({
             request.check()
             runCatching(block).getOrNull()
         }, executor)
-        val netease = async { searchNetease(track, request) }
+        val netease = if (track.neteaseSongId.isNotEmpty())
+            CompletableFuture.completedFuture(LyricSong(track.neteaseSongId, "", track))
+        else async { searchNetease(track, request) }
         val qq = async { searchQq(track, request) }
         val kugou = async { searchKugou(track, request)?.let { fetchKugou(it, track, request) } }
         val neteaseLyric = netease.thenCompose { song -> async { song?.let { fetchNetease(it, track, request) } } }
         val qqLyric = qq.thenCompose { song -> async { song?.let { fetchQq(it, track, request) } } }
         val neteaseTtml = netease.thenCompose { song -> async { song?.let { fetchTtml("netease", it, track, request) } } }
         val qqTtml = qq.thenCompose { song -> async { song?.let { fetchTtml("qqmusic", it, track, request) } } }
-        val tasks = listOf(neteaseLyric, qqLyric, kugou, neteaseTtml, qqTtml)
+        val tasks = listOf(neteaseLyric, qqLyric, kugou, neteaseTtml, qqTtml).map { task ->
+            task.thenApply { lyric ->
+                if (lyric != null) request.publish(lyric)
+                lyric
+            }
+        }
         return CompletableFuture.allOf(*tasks.toTypedArray()).thenApply { tasks.mapNotNull { it.join() } }
     }
 }

@@ -2,11 +2,11 @@
 
 **本 fork 的修改**
 
-- 网易云 MediaSession 提供有效歌曲 ID 时优先获取 AMLL TTML，失败后回到原有搜索流程；网易云搜索同时匹配显示歌名中附带的别名。
+- 平台歌词与 AMLL TTML 并行获取，有效歌词返回后立即展示，AMLL 命中后替换。网易云 MediaSession 提供有效歌曲 ID 时同时直取网易云歌词与 AMLL；缺少 ID 时通过搜索匹配，支持显示歌名中附带的别名。
 - 适配网易云 7.2.22：通过在线歌词补全暂停、恢复和拖动进度时的歌词数据，用户已确认真机测试正常；保留 9.0.40 的原生歌词修复。详见[修复记录](docs/PLAYER_STATE_LYRIC_REPAIR.md)。
 - 修复歌词获取失败：ColorOS 16 播放器状态重建会重新发布空歌词媒体数据，现于发布前补调原生 `loadLyricInBg`；MediaSession 缺少歌词时并行检索网易云、QQ 音乐、酷狗和 AMLL TTML，校验曲目后注入锁屏歌词管线。
 - 并行获取网易云、QQ 音乐、酷狗和 AMLL TTML 歌词，支持 YRC/QRC/KRC/TTML/LRC 及翻译。
-- 按歌词质量、曲目匹配度和用户设置的来源顺序选优；设置页支持上移、下移，调整后持久化并即时生效。
+- 有效 AMLL 歌词优先，其余结果按歌词质量、曲目匹配度和用户设置的来源顺序选优；设置页支持上移、下移，调整后持久化并即时生效。
 - 适配 TTML 背景和声、对唱及翻译时间轴，沿用现有锁屏岛渲染和播放器状态修复，在线获取失败时回退原歌词管线。
 
 [![构建 Debug APK](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml/badge.svg)](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge/actions/workflows/build-debug.yml)
