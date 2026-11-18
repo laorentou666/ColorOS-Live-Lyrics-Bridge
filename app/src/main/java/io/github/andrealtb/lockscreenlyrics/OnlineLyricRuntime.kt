@@ -1,6 +1,7 @@
 package io.github.andrealtb.lockscreenlyrics
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.media.MediaMetadata
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +11,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
+import java.util.function.Supplier
 
 /** Supplies the existing lyricInfo entry point and retains native metadata for fallback. */
 class OnlineLyricRuntime @JvmOverloads constructor(fetcher: LyricFetcher? = null) {
@@ -63,6 +65,11 @@ class OnlineLyricRuntime @JvmOverloads constructor(fetcher: LyricFetcher? = null
     }
 
     fun setOrder(value: String?) = session.setOrder(value)
+
+    fun initializeCache(context: Supplier<Context?>) {
+        if (sources.amllCache != null) return
+        context.get()?.let { sources.amllCache = AmllTtmlCache(it.contentResolver) }
+    }
 
     @SuppressLint("WrongConstant") // ColorOS extends MediaMetadata with the lyricInfo key.
     private fun isOnline(value: MediaMetadata) = runCatching {

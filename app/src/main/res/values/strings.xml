@@ -1,8 +1,12 @@
 <resources>
-    <string name="online_lyric_order_title">歌词源优先级</string>
-    <string name="online_lyric_order_summary">调整同等质量歌词的来源顺序</string>
+    <string name="online_lyric_order_title">在线歌词</string>
+    <string name="online_lyric_order_summary">歌词来源顺序和 AMLL 缓存</string>
     <string name="online_lyric_order_description">同时查找所有来源，取得歌词后立即显示，AMLL 有结果时优先替换。其余结果优先选择匹配准确的逐字歌词；同等质量与匹配得分按下方顺序选择。调整后立即生效。</string>
     <string name="online_lyric_amll">AMLL TTML</string>
+    <string name="online_lyric_cache_limit">AMLL 缓存自动清理上限</string>
+    <string name="online_lyric_cache_clear">清理缓存</string>
+    <string name="online_lyric_cache_cleared">AMLL 缓存已清理</string>
+    <string name="online_lyric_cache_error">AMLL 缓存操作失败</string>
     <string name="online_lyric_move_up">上移</string>
     <string name="online_lyric_move_down">下移</string>
     <string name="app_name">ColorOS Live Lyrics Bridge</string>

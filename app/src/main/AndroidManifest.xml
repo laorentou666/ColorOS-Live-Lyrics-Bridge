@@ -25,6 +25,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.LockscreenLyrics">
         <provider
+            android:name=".online.AmllTtmlCacheProvider"
+            android:authorities="${applicationId}.amllcache"
+            android:exported="true" />
+        <provider
             android:name=".LyricContentCleanupConfigProvider"
             android:authorities="io.github.andrealtb.lockscreenlyrics.contentcleanup"
             android:exported="false"

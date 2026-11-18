@@ -1,0 +1,63 @@
+package io.github.andrealtb.lockscreenlyrics.online;
+
+import android.content.Context;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+
+import java.io.File;
+import java.nio.file.Files;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 35, manifest = Config.NONE)
+public class AmllTtmlCacheProviderTest {
+    private Context context;
+    private File directory;
+
+    @Before
+    public void setUp() throws Exception {
+        context = RuntimeEnvironment.getApplication();
+        AmllTtmlCacheProvider.clear(context);
+        directory = new File(context.getCacheDir(), "amll-ttml");
+        Files.createDirectories(directory.toPath());
+    }
+
+    @Test
+    public void reachingTheLimitEvictsTheOldestEntryAndPersistsTheLimit() throws Exception {
+        assertEquals(1000, AmllTtmlCacheProvider.readLimitMb(context));
+        File old = new File(directory, "old.ttml");
+        File recent = new File(directory, "recent.ttml");
+        Files.write(old.toPath(), new byte[500_000]);
+        Files.write(recent.toPath(), new byte[500_000]);
+        assertTrue(old.setLastModified(recent.lastModified() - 1000));
+
+        AmllTtmlCacheProvider.setLimitMb(context, 1);
+
+        assertEquals(1, AmllTtmlCacheProvider.readLimitMb(context));
+        assertFalse(old.exists());
+        assertTrue(recent.exists());
+    }
+
+    @Test
+    public void manualClearLeavesOtherAppCacheFilesAndTheConfiguredLimit() throws Exception {
+        AmllTtmlCacheProvider.setLimitMb(context, 250);
+        File cachedLyric = new File(directory, "track.ttml");
+        File otherCache = new File(context.getCacheDir(), "other-cache");
+        Files.write(cachedLyric.toPath(), new byte[]{1});
+        Files.write(otherCache.toPath(), new byte[]{1});
+
+        AmllTtmlCacheProvider.clear(context);
+
+        assertFalse(cachedLyric.exists());
+        assertTrue(otherCache.exists());
+        assertEquals(250, AmllTtmlCacheProvider.readLimitMb(context));
+    }
+}

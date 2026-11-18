@@ -63,6 +63,8 @@ class UrlLyricHttp : LyricHttp {
 }
 
 class OnlineLyricSources @JvmOverloads constructor(private val http: LyricHttp = UrlLyricHttp()) {
+    @Volatile internal var amllCache: AmllTtmlCache? = null
+
     private fun json(vararg pairs: Pair<String, Any>) = JSONObject(linkedMapOf(*pairs))
     private fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
     private fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList() else
@@ -198,13 +200,17 @@ class OnlineLyricSources @JvmOverloads constructor(private val http: LyricHttp =
 
     fun fetchTtml(platform: String, song: LyricSong, track: LyricTrack, request: LyricRequest): OnlineLyric? {
         val ids = if (platform == "qqmusic") listOf(song.mid, song.id).filter { it.isNotBlank() }.distinct() else listOf(song.id)
+        val cache = amllCache
         for (id in ids) {
             request.check()
+            cache?.read(platform, id)?.let { text ->
+                result("amll", "ttml", text, song, track)?.let { return it }
+            }
             val found = runCatching {
                 val query = if (platform == "netease") "ncmMusicId" else "qqMusicId"
                 val text = get("https://api.amll.dev/v1/lyrics/get?$query=${encode(id)}", request)
                     .optJSONObject("data")?.optString("lyrics").orEmpty()
-                result("amll", "ttml", text, song, track)
+                result("amll", "ttml", text, song, track)?.also { cache?.write(platform, id, text) }
             }.getOrNull()
             if (found != null) return found
         }

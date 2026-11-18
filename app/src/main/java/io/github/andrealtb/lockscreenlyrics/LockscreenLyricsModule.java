@@ -3095,6 +3095,7 @@ public final class LockscreenLyricsModule extends XposedModule {
             Object owner, Object key, MediaMetadata metadata, String packageName) {
         if (owner == null || !(key instanceof String)) return metadata;
         try {
+            onlineLyrics.initializeCache(LockscreenLyricsModule::currentApplicationContext);
             WeakReference<Object> ownerRef = new WeakReference<>(owner);
             Method refresh = resolveSystemUiMetadataRefreshMethod(owner);
             return onlineLyrics.observe(nullToEmpty(packageName), (String) key, metadata, updated -> {
