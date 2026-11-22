@@ -181,6 +181,46 @@ public class OnlineLyricSourcesTest {
         } finally { releaseQq.countDown(); executor.shutdownNow(); }
     }
 
+    @Test public void crossPlatformLyricsUseTheCatalogTitleAndArtistsForSearchAndMatching() throws Exception {
+        for (String[] sample : Arrays.asList(
+                new String[]{"28466084", "瑠璃の鳥", "霜月はるか", "瑠璃の鳥 (ゲーム「殻ノ少女」EDテーマ)"},
+                new String[]{"409060879", "突然好想你 (Live)", "徐佳莹", "突然好想你 (Live)"})) {
+            String id = sample[0], name = sample[1], artist = sample[2], displayTitle = sample[3];
+            String query = name + " " + artist;
+            List<String> qqBodies = new ArrayList<>(), kugouUrls = new ArrayList<>();
+            AtomicInteger details = new AtomicInteger();
+            OnlineLyricSources sources = new OnlineLyricSources((url, body, headers, request) -> {
+                if (url.contains("/song/detail/")) {
+                    details.incrementAndGet();
+                    assertTrue(url.endsWith("ids=%5B" + id + "%5D"));
+                    return "{\"songs\":[{\"id\":" + id + ",\"name\":\"" + name + "\",\"artists\":[{\"name\":\"" + artist + "\"}]}]}";
+                }
+                if (url.contains("musics.fcg")) {
+                    qqBodies.add(body);
+                    return "{\"code\":0,\"request\":{\"code\":0,\"data\":{\"body\":{\"item_song\":[{\"id\":456,\"mid\":\"mid\",\"title\":\""
+                            + name + "\",\"singer\":[{\"name\":\"" + artist + "\"}]}]}}}}";
+                }
+                if (url.contains("musicu.fcg")) return "{\"code\":0,\"request\":{\"code\":0,\"data\":{\"qrc_t\":1,\"lyric\":\"" + OnlineLyricCryptoTest.QRC + "\"}}}";
+                if (url.contains("mobilecdn")) {
+                    kugouUrls.add(url);
+                    return "{\"data\":{\"info\":[{\"hash\":\"hash\",\"songname\":\"" + name + "\",\"singername\":\"" + artist + "\"}]}}";
+                }
+                if (url.contains("lyrics.kugou.com/search")) return "{\"candidates\":[{\"id\":7,\"accesskey\":\"key\"}]}";
+                if (url.contains("/download")) return "{\"fmt\":\"lrc\",\"content\":\"WzAwOjAxXUxpbmU=\"}";
+                if (url.endsWith("qqMusicId=mid")) return "{\"data\":{\"lyrics\":\"<tt><body><p begin='1s' end='2s'>Line</p></body></tt>\"}}";
+                return "{}";
+            });
+            List<OnlineLyric> results = sources.fetchAll(new LyricTrack(displayTitle, "Artist shown by player", "", 0, id),
+                    new LyricRequest(), Runnable::run).get();
+            assertEquals(1, details.get());
+            assertEquals(query, new JSONObject(qqBodies.get(0)).getJSONObject("request").getJSONObject("param").getString("query"));
+            assertTrue(kugouUrls.get(0).contains("keyword=" + java.net.URLEncoder.encode(query, "UTF-8") + "&"));
+            for (String source : Arrays.asList("qqmusic", "kugou", "amll")) {
+                assertTrue(source, results.stream().anyMatch(lyric -> source.equals(lyric.getSource()) && lyric.getScore() >= 0));
+            }
+        }
+    }
+
     @Test public void wrongArtistPreventsFetchingLyricsAndTtml() {
         List<String> urls = new ArrayList<>();
         OnlineLyricSources sources = new OnlineLyricSources((url, body, headers, scope) -> {

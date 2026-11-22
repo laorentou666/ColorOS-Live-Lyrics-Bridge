@@ -226,12 +226,28 @@ class OnlineLyricSources @JvmOverloads constructor(private val http: LyricHttp =
         val netease = if (track.neteaseSongId.isNotEmpty())
             CompletableFuture.completedFuture(LyricSong(track.neteaseSongId, "", track))
         else async { searchNetease(track, request) }
-        val qq = async { searchQq(track, request) }
-        val kugou = async { searchKugou(track, request)?.let { fetchKugou(it, track, request) } }
+        val searchTrack = if (track.neteaseSongId.isEmpty()) CompletableFuture.completedFuture(track)
+        else async {
+            val id = track.neteaseSongId
+            val song = get("https://music.163.com/api/song/detail/?id=$id&ids=%5B$id%5D", request)
+                .optJSONArray("songs").objects().firstOrNull { it.optString("id") == id }
+            song?.optString("name")?.takeIf { it.isNotBlank() }?.let { name ->
+                track.copy(title = name, artist = singers(song.optJSONArray("artists")).ifBlank { track.artist })
+            }
+        }.thenApply { detail ->
+            // NetEase appends a translation or alias as " (...)". Only the detail response identifies the original title.
+            detail ?: track.takeUnless { it.title.endsWith(')') && " (" in it.title }
+        }
+        val qq = searchTrack.thenCompose { query -> async {
+            if (query == null) null else searchQq(query, request)?.let { song -> song to query }
+        } }
+        val kugou = searchTrack.thenCompose { query -> async {
+            if (query == null) null else searchKugou(query, request)?.let { fetchKugou(it, query, request) }
+        } }
         val neteaseLyric = netease.thenCompose { song -> async { song?.let { fetchNetease(it, track, request) } } }
-        val qqLyric = qq.thenCompose { song -> async { song?.let { fetchQq(it, track, request) } } }
+        val qqLyric = qq.thenCompose { match -> async { match?.let { (song, query) -> fetchQq(song, query, request) } } }
         val neteaseTtml = netease.thenCompose { song -> async { song?.let { fetchTtml("netease", it, track, request) } } }
-        val qqTtml = qq.thenCompose { song -> async { song?.let { fetchTtml("qqmusic", it, track, request) } } }
+        val qqTtml = qq.thenCompose { match -> async { match?.let { (song, query) -> fetchTtml("qqmusic", song, query, request) } } }
         val tasks = listOf(neteaseLyric, qqLyric, kugou, neteaseTtml, qqTtml).map { task ->
             task.thenApply { lyric ->
                 if (lyric != null) request.publish(lyric)
