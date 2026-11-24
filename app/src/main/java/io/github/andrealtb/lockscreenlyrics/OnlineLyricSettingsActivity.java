@@ -11,13 +11,11 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import io.github.andrealtb.lockscreenlyrics.online.AmllTtmlCacheProvider;
 import io.github.andrealtb.lockscreenlyrics.online.OnlineLyricSelection;
 
 public final class OnlineLyricSettingsActivity extends SettingsBaseActivity {
@@ -48,6 +46,7 @@ public final class OnlineLyricSettingsActivity extends SettingsBaseActivity {
         scroll.addView(content);
         setContentView(scroll);
         renderRows();
+        OnlineLyricSettings.publish(this);
     }
 
     private LinearLayout cacheCard() {
@@ -55,7 +54,7 @@ public final class OnlineLyricSettingsActivity extends SettingsBaseActivity {
         card.addView(text(getString(R.string.online_lyric_cache_limit), 14, settingsTextColor()), matchWrap());
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        cacheLimit = button(formatLimit(AmllTtmlCacheProvider.readLimitMb(this)));
+        cacheLimit = button(formatLimit(OnlineLyricSettings.readCacheLimit(this)));
         cacheLimit.setOnClickListener(view -> chooseCacheLimit());
         actions.addView(cacheLimit, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         clearCache = button(getString(R.string.online_lyric_cache_clear));
@@ -70,7 +69,7 @@ public final class OnlineLyricSettingsActivity extends SettingsBaseActivity {
     }
 
     private void chooseCacheLimit() {
-        int limit = AmllTtmlCacheProvider.readLimitMb(this);
+        int limit = OnlineLyricSettings.readCacheLimit(this);
         String[] labels = new String[CACHE_LIMITS_MB.length];
         int checked = -1;
         for (int i = 0; i < CACHE_LIMITS_MB.length; i++) {
@@ -94,19 +93,20 @@ public final class OnlineLyricSettingsActivity extends SettingsBaseActivity {
             int message = 0;
             try {
                 if (clear) {
-                    AmllTtmlCacheProvider.clear(getApplicationContext());
+                    OnlineLyricSettings.publishCacheClear(getApplicationContext());
                     message = R.string.online_lyric_cache_cleared;
                 } else {
-                    AmllTtmlCacheProvider.setLimitMb(getApplicationContext(), limitMb);
+                    OnlineLyricSettings.saveCacheLimit(getApplicationContext(), limitMb);
+                    OnlineLyricSettings.publish(getApplicationContext());
                 }
-            } catch (IOException error) {
+            } catch (RuntimeException error) {
                 Log.w("BridgeAmllCache", "Unable to update AMLL TTML cache", error);
                 message = R.string.online_lyric_cache_error;
             }
             int feedback = message;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
-                cacheLimit.setText(formatLimit(AmllTtmlCacheProvider.readLimitMb(this)));
+                cacheLimit.setText(formatLimit(OnlineLyricSettings.readCacheLimit(this)));
                 cacheLimit.setEnabled(true);
                 clearCache.setEnabled(true);
                 if (feedback != 0) Toast.makeText(this, feedback, Toast.LENGTH_SHORT).show();

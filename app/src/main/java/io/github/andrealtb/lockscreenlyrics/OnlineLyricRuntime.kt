@@ -66,9 +66,19 @@ class OnlineLyricRuntime @JvmOverloads constructor(fetcher: LyricFetcher? = null
 
     fun setOrder(value: String?) = session.setOrder(value)
 
-    fun initializeCache(context: Supplier<Context?>) {
+    @Synchronized fun initializeCache(context: Supplier<Context?>) {
         if (sources.amllCache != null) return
-        context.get()?.let { sources.amllCache = AmllTtmlCache(it.contentResolver) }
+        context.get()?.let { sources.amllCache = AmllTtmlCache(it) }
+    }
+
+    fun setTtmlCacheLimit(context: Context, limitMb: Int) {
+        initializeCache { context }
+        sources.amllCache?.let { cache -> executor.execute { cache.setLimitMb(limitMb) } }
+    }
+
+    fun clearTtmlCache(context: Context) {
+        initializeCache { context }
+        sources.amllCache?.let { cache -> executor.execute { cache.clear() } }
     }
 
     @SuppressLint("WrongConstant") // ColorOS extends MediaMetadata with the lyricInfo key.

@@ -5,7 +5,7 @@
     <string name="online_lyric_amll">AMLL TTML</string>
     <string name="online_lyric_cache_limit">AMLL 缓存自动清理上限</string>
     <string name="online_lyric_cache_clear">清理缓存</string>
-    <string name="online_lyric_cache_cleared">AMLL 缓存已清理</string>
+    <string name="online_lyric_cache_cleared">已向 SystemUI 发送缓存清理请求</string>
     <string name="online_lyric_cache_error">AMLL 缓存操作失败</string>
     <string name="online_lyric_move_up">上移</string>
     <string name="online_lyric_move_down">下移</string>

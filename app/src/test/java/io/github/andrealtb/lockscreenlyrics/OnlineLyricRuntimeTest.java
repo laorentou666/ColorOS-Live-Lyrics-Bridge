@@ -2,13 +2,16 @@ package io.github.andrealtb.lockscreenlyrics;
 
 import android.media.MediaMetadata;
 import android.os.Looper;
+import android.content.Context;
 import io.github.andrealtb.lockscreenlyrics.online.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -25,6 +28,42 @@ public class OnlineLyricRuntimeTest {
     }
     private OnlineLyric lyric() {
         return new OnlineLyric("netease", "yrc", 20, OnlineLyricParser.parse("yrc", "[1000,1000](1000,500,0)On(1500,500,0)line"));
+    }
+
+    @Test public void cacheInitializationIsSerialized() throws Exception {
+        OnlineLyricRuntime runtime = new OnlineLyricRuntime();
+        Context context = RuntimeEnvironment.getApplication();
+        AtomicInteger suppliers = new AtomicInteger();
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch secondStarted = new CountDownLatch(1);
+        CountDownLatch secondSupplierEntered = new CountDownLatch(1);
+        Semaphore releaseFirst = new Semaphore(0);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> first = executor.submit(() -> runtime.initializeCache(() -> {
+                suppliers.incrementAndGet();
+                firstEntered.countDown();
+                releaseFirst.acquireUninterruptibly();
+                return context;
+            }));
+            assertTrue(firstEntered.await(2, TimeUnit.SECONDS));
+            Future<?> second = executor.submit(() -> {
+                secondStarted.countDown();
+                runtime.initializeCache(() -> {
+                    suppliers.incrementAndGet();
+                    secondSupplierEntered.countDown();
+                    return context;
+                });
+            });
+            assertTrue(secondStarted.await(2, TimeUnit.SECONDS));
+            assertFalse(secondSupplierEntered.await(250, TimeUnit.MILLISECONDS));
+            releaseFirst.release();
+            first.get(2, TimeUnit.SECONDS);
+            second.get(2, TimeUnit.SECONDS);
+            assertEquals(1, suppliers.get());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test public void failureKeepsOriginalMetadataAndSuccessfulResultPreservesArtwork() {

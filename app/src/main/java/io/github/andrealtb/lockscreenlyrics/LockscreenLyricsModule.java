@@ -11095,6 +11095,12 @@ public final class LockscreenLyricsModule extends XposedModule {
                             OnlineLyricSettings.save(receiverContext,
                                     nullToEmpty(intent.getStringExtra(OnlineLyricSettings.KEY)));
                             onlineLyrics.setOrder(OnlineLyricSettings.read(receiverContext));
+                            int limitMb = intent.getIntExtra(OnlineLyricSettings.CACHE_LIMIT_KEY, 0);
+                            if (limitMb > 0 && limitMb <= 4000) {
+                                onlineLyrics.setTtmlCacheLimit(receiverContext, limitMb);
+                            }
+                        } else if (OnlineLyricSettings.CACHE_CLEAR_ACTION.equals(intent.getAction())) {
+                            onlineLyrics.clearTtmlCache(receiverContext);
                         } else if (LyricUiSettings.ACTION_RESTART_SYSTEM_UI.equals(
                                 intent.getAction())) {
                             handleSystemUiRestartRequest(intent);
@@ -11118,6 +11124,7 @@ public final class LockscreenLyricsModule extends XposedModule {
                 filter.addAction(LyricUiSettings.ACTION_CONTENT_CLEANUP_CHANGED);
                 filter.addAction(LyricUiSettings.ACTION_DEBUG_SETTINGS_CHANGED);
                 filter.addAction(OnlineLyricSettings.ACTION);
+                filter.addAction(OnlineLyricSettings.CACHE_CLEAR_ACTION);
                 filter.addAction(LyricUiSettings.ACTION_RESTART_SYSTEM_UI);
                 if (Build.VERSION.SDK_INT >= 33) {
                     appContext.registerReceiver(
