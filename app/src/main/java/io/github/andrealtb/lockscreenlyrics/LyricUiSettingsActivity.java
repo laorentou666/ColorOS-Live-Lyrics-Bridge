@@ -840,7 +840,14 @@ public final class LyricUiSettingsActivity extends SettingsBaseActivity {
     }
 
     private View createPreviewGestureSurface() {
-        FrameLayout surface = new FrameLayout(this);
+        FrameLayout surface = new FrameLayout(this) {
+            @Override
+            public boolean performClick() {
+                super.performClick();
+                collapseFloatingPreview();
+                return true;
+            }
+        };
         surface.setClickable(true);
         surface.setFocusable(true);
         surface.setContentDescription(getString(R.string.cd_preview_collapse_gesture));
