@@ -853,6 +853,7 @@ public final class LyricUiSettingsActivity extends SettingsBaseActivity {
         surface.setContentDescription(getString(R.string.cd_preview_collapse_gesture));
         surface.setVisibility(View.GONE);
 
+        int touchSlop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
         surface.setOnTouchListener((view, event) -> {
             if (!previewFloating || previewCollapsed || previewTransitionRunning) {
                 return false;
@@ -887,7 +888,7 @@ public final class LyricUiSettingsActivity extends SettingsBaseActivity {
                     if (deltaY <= -dp(PREVIEW_COLLAPSE_SWIPE_DP)
                             && Math.abs(deltaY) > Math.abs(deltaX) * 1.1f) {
                         collapseFloatingPreview();
-                    } else {
+                    } else if (Math.abs(deltaX) <= touchSlop && Math.abs(deltaY) <= touchSlop) {
                         view.performClick();
                     }
                     return true;
